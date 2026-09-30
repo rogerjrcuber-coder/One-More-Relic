@@ -17,7 +17,7 @@ async function connect(){
   socket?.disconnect();socket=window.io(endpoint,{reconnection:false,timeout:5000});
   socket.on('room:state',receive);
   socket.on('latency:probe',ack=>ack());
-  socket.on('server:hello',h=>{if(h.protocol!==PROTOCOL){error('Server update required: deploy v1.2.3 before playing.');socket.disconnect();}});
+  socket.on('server:hello',h=>{if(h.protocol!==PROTOCOL){error('Server update required: deploy v1.2.4 before playing.');socket.disconnect();}});
   socket.on('disconnect',()=>{if(active){keys.clear();mouse.down=false;pending=[];active=false;error('Connection lost. Rejoin your party from Play.');}});
   await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('connect_error',()=>reject(Error('Cannot reach the game server.')));});
 }
@@ -31,9 +31,10 @@ function openLobby(nextMode='dungeon',quick=false,mapId){
   const join=async solo=>{try{
     await connect();const joined=await rpc('room:join',{protocol:PROTOCOL,mode,name:name.value,code:solo?undefined:code.value.trim().toUpperCase()||undefined,quickplay:quick,skin:window.OMRV11?.meta.skin,weapon:$('weapon').value,perk:$('perk').value,biome:biome.value==='custom'?'moss':biome.value});
     selfId=joined.playerId;room=joined.room;receive(room);if(room.status==='playing')return;
-    const lobby=show('ROOM '+joined.code);text(lobby,'p',mode==='duel'?'Waiting for at least two players.':'Share this code with your friends.');
+    const lobby=show('ROOM '+joined.code),copy=text(lobby,'p',quick?'Waiting for another player. Quickplay starts automatically at 2 players.':mode==='duel'?'Waiting for at least two players.':'Share this code with your friends. Start now to play solo.');
+    copy.id='networkLobbyCopy';
     const roster=text(lobby,'div','');roster.id='networkRoster';
-    if(room.hostId===selfId)button(lobby,'Start run',async()=>{try{const map=biome.value==='custom'?window.OMR.selectedMap():undefined;await rpc('room:start',{map,mapId});}catch(e){error(e.message);}});
+    if(room.hostId===selfId&&!quick){const start=button(lobby,'Start solo',async()=>{try{copy.textContent=Object.keys(room.players).length===1?'Starting a solo run...':'Starting the party run...';const map=biome.value==='custom'?window.OMR.selectedMap():undefined;await rpc('room:start',{map,mapId});}catch(e){error(e.message);}});start.id='networkStart';}
     button(lobby,'Leave',leave);renderRoster();
     if(solo&&mode!=='duel')await rpc('room:start',{map:biome.value==='custom'?window.OMR.selectedMap():undefined,mapId});
   }catch(e){error(e.message);}};
@@ -41,7 +42,7 @@ function openLobby(nextMode='dungeon',quick=false,mapId){
   if(!quick&&mode!=='duel')button(b,'Play solo',()=>join(true));
   if(mode==='dungeon')button(b,'Browse published dungeons',async()=>{try{await connect();const r=await new Promise(resolve=>socket.emit('maps:list',resolve));const list=show('Published dungeons');if(!r.maps.length)text(list,'p','No published maps yet. Build one in the workshop.');for(const m of r.maps)button(list,m.name,()=>openLobby('dungeon',false,m.id));}catch(e){error(e.message);}});
 }
-function renderRoster(){const r=$('networkRoster');if(r&&room){r.replaceChildren();for(const p of Object.values(room.players))text(r,'p',p.name+(p.id===room.hostId?' / host':''));}}
+function renderRoster(){const r=$('networkRoster');if(r&&room){r.replaceChildren();for(const p of Object.values(room.players))text(r,'p',p.name+(p.id===room.hostId?' / host':''));const count=Object.keys(room.players).length,start=$('networkStart');if(start)start.textContent=count===1?'Start solo':'Start run';}}
 function receive(s){
   if(s.protocol!==PROTOCOL){error('Client/server version mismatch. Reload after the server deploys.');return;}
   const changed=!room||s.revision!==room.revision;

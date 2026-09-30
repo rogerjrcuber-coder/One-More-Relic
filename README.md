@@ -1,4 +1,4 @@
-# One More Relic v1.2.3
+# One More Relic v1.2.4
 
 A top-down dungeon crawler built around short multiplayer expeditions, player-made dungeons, escalating run upgrades, rare relic combinations, and a rolling duel playlist.
 
@@ -21,8 +21,8 @@ Production-style commands are `npm run build`, `npm test`, and `npm start`. Copy
 
 ## Game modes
 
-- **Play:** create or join a 1–8 player dungeon room with a five-character code, including authored maps already in progress, or play solo.
-- **Quickplay:** enter an active public dungeon or duel lobby; a new room is created when none is available.
+- **Play:** create or join a 1–8 player dungeon room with a five-character code, including authored maps already in progress. Starting a private room alone switches directly to a solo run.
+- **Quickplay:** match into an active public session or wait in a queue. Quickplay requires at least two players and starts automatically when player two joins.
 - **Waves:** 1–8 players share an arena across five-wave sets, then move together to the next arena.
 - **Duel playlist:** 2–4 players remain together while fourteen arenas rotate. Health and temporary power reset each round.
 - **Dungeon Creator:** build 2–5 stage expeditions on maps up to 64 × 44 tiles. Place enemies, bosses, upgrade chests, relic vaults, keys, locked doors, traps, and lights. Published local maps expire after one hour with no active run; blueprints remain saved.

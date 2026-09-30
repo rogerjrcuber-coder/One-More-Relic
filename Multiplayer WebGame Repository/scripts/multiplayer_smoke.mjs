@@ -40,5 +40,12 @@ try{
  const syncA=await ack(a,'room:sync'),syncB=await ack(b,'room:sync');
  assert.equal(syncA.room.world.map.name,syncB.room.world.map.name);
  assert.deepEqual(syncA.room.world.map.grid,syncB.room.world.map.grid);
- console.log('PASS: late room-code join receives active custom map; two clients share authoritative movement, collision, and world state');
+ const c=await connect(),d=await connect();
+ const queued=await ack(c,'room:join',{protocol:12,mode:'waves',name:'Queued one',quickplay:true});
+ assert.equal(queued.room.status,'lobby','one quickplay player must wait');
+ await assert.rejects(ack(c,'room:start',{}),/two players/);
+ const matched=await ack(d,'room:join',{protocol:12,mode:'waves',name:'Queued two',quickplay:true});
+ assert.equal(matched.code,queued.code);
+ assert.equal(matched.room.status,'playing','quickplay must auto-start when player two joins');
+ console.log('PASS: relic selection, 2-player quickplay, late custom-room join, authoritative movement, collision, and world state');
 }finally{clearTimeout(deadline);for(const s of sockets)s.disconnect();}

@@ -19,7 +19,7 @@ export class RoomStore {
     room.players[id]=p;this.membership.set(id,room.code);room.lastActiveAt=Date.now();room.paused=false;
     if(room.hostId===id&&request.biome&&Object.hasOwn(biomes,request.biome))room.biome=request.biome;
     if(room.world){spawnPlayer(room,p,Object.keys(room.players).length-1);if(room.mode==='duel')p.downed=true;}
-    if(room.public&&room.status==='lobby'&&(room.mode!=='duel'||Object.keys(room.players).length>=2))this.start(room,room.hostId);
+    if(room.public&&room.status==='lobby'&&Object.keys(room.players).length>=2)this.start(room,room.hostId);
     return room;
   }
   create(hostId:string,mode:Mode,isPublic:boolean):RoomState {
@@ -36,6 +36,7 @@ export class RoomStore {
   start(r:RoomState,id:string):void {
     if(r.hostId!==id)throw Error('Only the host can start');
     if(r.status==='playing')throw Error('Run already started');
+    if(r.public&&Object.keys(r.players).length<2)throw Error('Quickplay requires at least two players');
     if(r.mode==='duel'&&Object.keys(r.players).length<2)throw Error('Duels require two players');
     r.stage=1;r.round=1;r.status='playing';r.maxStages=r.customMap?.stageCount||3;loadWorld(r);r.lastActiveAt=Date.now();
   }

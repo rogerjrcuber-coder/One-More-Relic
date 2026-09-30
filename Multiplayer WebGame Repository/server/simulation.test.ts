@@ -48,7 +48,7 @@ test('duel winner scores once, rotates and clears upgrades',()=>{
 test('waves advances, stage changes after five waves, and quickplay starts',()=>{
   const {room}=run('waves');room.world!.wave=5;room.world!.enemies=[];
   stepRoom(room);for(let i=0;i<125;i++)stepRoom(room);assert.equal(room.stage,2);assert.equal(room.world!.wave,6);
-  const store=new RoomStore();const quick=store.join('x',{mode:'waves',name:'X',quickplay:true});assert.equal(quick.status,'playing');
+  const store=new RoomStore();const quick=store.join('x',{mode:'waves',name:'X',quickplay:true});assert.equal(quick.status,'lobby');store.join('y',{mode:'waves',name:'Y',quickplay:true});assert.equal(quick.status,'playing');
 });
 test('generated maps have connected required objectives over many seeds',()=>{
   for(const biome of Object.keys(biomes) as Biome[])for(let seed=1;seed<=20;seed++){

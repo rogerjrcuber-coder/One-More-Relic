@@ -27,6 +27,7 @@ with sync_playwright() as pw:
     pages[0].locator('#frontBody select').select_option('custom')
     pages[0].get_by_role('button', name='Create / join room', exact=True).click()
     pages[0].wait_for_function('!!window.OMRNetwork.state')
+    assert pages[0].get_by_role('button', name='Start solo', exact=True).is_visible()
     code = pages[0].evaluate('OMRNetwork.state.code')
     pages[1].locator('#frontBody input').nth(1).fill(code)
     pages[1].get_by_role('button', name='Create / join room', exact=True).click()
@@ -69,8 +70,23 @@ with sync_playwright() as pw:
     pages[1].wait_for_timeout(700)
     after = pages[1].evaluate('OMRNetwork.state.world.time')
     assert after>before+.4
+    quick_contexts = [browser.new_context(viewport={'width': 900, 'height': 700}) for _ in range(2)]
+    quick_pages = [context.new_page() for context in quick_contexts]
+    for page in quick_pages:
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        page.goto('http://127.0.0.1:8012')
+        page.locator('[data-menu=quickplay]').click()
+    quick_pages[0].get_by_role('button', name='Find a game', exact=True).click()
+    quick_pages[0].wait_for_function("OMRNetwork.state && OMRNetwork.state.status === 'lobby'")
+    assert not quick_pages[0].locator('#networkStart').count()
+    assert 'starts automatically at 2 players' in quick_pages[0].locator('#networkLobbyCopy').inner_text()
+    quick_pages[1].get_by_role('button', name='Find a game', exact=True).click()
+    for page in quick_pages:
+        page.wait_for_function('OMRNetwork.active')
+    for context in quick_contexts:
+        context.close()
     assert not errors, errors
-    print('PASS: relic choice UI, detailed/low graphics, synchronized movement, and live menus', flush=True)
+    print('PASS: solo start label, 2-player Quickplay, relic choice UI, graphics modes, synchronized movement, and live menus', flush=True)
     for c in contexts: c.close()
     browser.close()
 
