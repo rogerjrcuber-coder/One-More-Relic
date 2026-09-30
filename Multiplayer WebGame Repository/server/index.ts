@@ -45,23 +45,30 @@ io.on('connection', socket => {
       rooms.start(room, socket.id); emitRoom(room.code); ack?.({ ok: true }); }
     catch (error) { ack?.({ ok: false, error: error instanceof Error ? error.message : 'Could not start' }); }
   });
-  socket.on('player:input', (input: { x?: number; y?: number }) => {
+  socket.on('player:input', (input: { x?: number; y?: number; moveX?: number; moveY?: number }) => {
     const room = rooms.findByPlayer(socket.id), player = room?.players[socket.id];
     if (!room || !player || room.status !== 'playing') return;
-    const x = Number(input?.x), y = Number(input?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    const length = Math.hypot(x, y) || 1, now = Date.now();
+    const targetX = Number(input?.x), targetY = Number(input?.y);
+    const moveX = Number(input?.moveX), moveY = Number(input?.moveY);
+    if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) return;
+    const now = Date.now();
     const dt = Math.min(0.12, Math.max(0, (now - (player.lastInputAt || now)) / 1000));
     player.lastInputAt = now;
-    const speed = 155, dx = x / length * speed * dt, dy = y / length * speed * dt, grid = room.mapGrid;
+    const grid = room.mapGrid;
     const canMove = (px: number, py: number) => {
       if (!grid?.length) return px >= 11 && py >= 11 && px <= 1920 - 11 && py <= 1360 - 11;
       const tile = 40, radius = 11;
       const wall = (wx: number, wy: number) => { const tx = Math.floor(wx / tile), ty = Math.floor(wy / tile); return tx < 0 || ty < 0 || ty >= grid.length || tx >= (grid[0]?.length || 0) || grid[ty]?.[tx] === 1; };
       return !wall(px - radius, py - radius) && !wall(px + radius, py - radius) && !wall(px - radius, py + radius) && !wall(px + radius, py + radius);
     };
+    const requestedX = targetX - player.x, requestedY = targetY - player.y;
+    const requestedDistance = Math.hypot(requestedX, requestedY);
+    const maxStep = Math.max(10, 560 * dt);
+    const scale = requestedDistance > maxStep ? maxStep / requestedDistance : 1;
+    const dx = requestedX * scale, dy = requestedY * scale;
     if (canMove(player.x + dx, player.y)) player.x += dx;
     if (canMove(player.x, player.y + dy)) player.y += dy;
+    void moveX; void moveY;
     room.lastActiveAt = now;
   });
   socket.on('stage:advance', () => { const room = rooms.findByPlayer(socket.id); if (room?.hostId === socket.id) { rooms.advance(room); emitRoom(room.code); } });

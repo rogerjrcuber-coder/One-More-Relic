@@ -23,11 +23,13 @@ try {
   assert.equal(joinedGuest.ok, true);
   assert.equal((await both).code, joinedHost.code);
   const playing = stateWhere(guest, room => room.status === 'playing');
-  assert.equal((await emitAck(host, 'room:start')).ok, true);
+  const grid = Array.from({ length: 16 }, (_, y) => Array.from({ length: 20 }, (_, x) => x === 0 || y === 0 || x === 19 || y === 15 ? 1 : 0));
+  grid[5][3] = 2;
+  assert.equal((await emitAck(host, 'room:start', { mapGrid: grid })).ok, true);
   const started = await playing;
   const before = started.players[joinedHost.playerId].x;
   const moved = stateWhere(guest, room => room.players[joinedHost.playerId].x > before);
-  host.emit('player:input', { x: 1, y: 0 });
+  host.emit('player:input', { x: before + 12, y: started.players[joinedHost.playerId].y, moveX: 1, moveY: 0 });
   assert.ok((await moved).players[joinedHost.playerId].x > before);
   console.log(`PASS: two clients joined ${joinedHost.code}, started together, and received synchronized movement`);
 } finally {
