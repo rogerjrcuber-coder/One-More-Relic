@@ -35,8 +35,14 @@ io.on('connection', socket => {
       emitRoom(room.code);
     } catch (error) { ack?.({ ok: false, error: error instanceof Error ? error.message : 'Could not join' }); }
   });
-  socket.on('room:start', (ack?: (value: unknown) => void) => {
-    try { const room = rooms.findByPlayer(socket.id); if (!room) throw new Error('Join a room first'); rooms.start(room, socket.id); emitRoom(room.code); ack?.({ ok: true }); }
+  socket.on('room:start', (payload: { mapGrid?: number[][] } = {}, ack?: (value: unknown) => void) => {
+    try { const room = rooms.findByPlayer(socket.id); if (!room) throw new Error('Join a room first');
+      if (payload?.mapGrid) {
+        const grid = payload.mapGrid;
+        if (!Array.isArray(grid) || grid.length < 3 || grid.length > 160 || !grid.every(row => Array.isArray(row) && row.length >= 3 && row.length <= 160 && row.every(tile => Number.isInteger(tile) && tile >= 0 && tile <= 11))) throw new Error('Invalid dungeon map');
+        room.mapGrid = grid.map(row => row.slice());
+      }
+      rooms.start(room, socket.id); emitRoom(room.code); ack?.({ ok: true }); }
     catch (error) { ack?.({ ok: false, error: error instanceof Error ? error.message : 'Could not start' }); }
   });
   socket.on('player:input', (input: { x?: number; y?: number }) => {
@@ -44,10 +50,19 @@ io.on('connection', socket => {
     if (!room || !player || room.status !== 'playing') return;
     const x = Number(input?.x), y = Number(input?.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    const length = Math.hypot(x, y) || 1, speed = 4;
-    player.x = Math.max(0, Math.min(1920, player.x + x / Math.max(1, length) * speed));
-    player.y = Math.max(0, Math.min(1360, player.y + y / Math.max(1, length) * speed));
-    room.lastActiveAt = Date.now();
+    const length = Math.hypot(x, y) || 1, now = Date.now();
+    const dt = Math.min(0.12, Math.max(0, (now - (player.lastInputAt || now)) / 1000));
+    player.lastInputAt = now;
+    const speed = 155, dx = x / length * speed * dt, dy = y / length * speed * dt, grid = room.mapGrid;
+    const canMove = (px: number, py: number) => {
+      if (!grid?.length) return px >= 11 && py >= 11 && px <= 1920 - 11 && py <= 1360 - 11;
+      const tile = 40, radius = 11;
+      const wall = (wx: number, wy: number) => { const tx = Math.floor(wx / tile), ty = Math.floor(wy / tile); return tx < 0 || ty < 0 || ty >= grid.length || tx >= (grid[0]?.length || 0) || grid[ty]?.[tx] === 1; };
+      return !wall(px - radius, py - radius) && !wall(px + radius, py - radius) && !wall(px - radius, py + radius) && !wall(px + radius, py + radius);
+    };
+    if (canMove(player.x + dx, player.y)) player.x += dx;
+    if (canMove(player.x, player.y + dy)) player.y += dy;
+    room.lastActiveAt = now;
   });
   socket.on('stage:advance', () => { const room = rooms.findByPlayer(socket.id); if (room?.hostId === socket.id) { rooms.advance(room); emitRoom(room.code); } });
   socket.on('disconnect', () => { const room = rooms.leave(socket.id); if (room && rooms.rooms.has(room.code)) emitRoom(room.code); });

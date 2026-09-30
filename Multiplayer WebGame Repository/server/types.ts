@@ -12,6 +12,7 @@ export interface PlayerState {
   maxHp: number;
   score: number;
   connected: boolean;
+  lastInputAt?: number;
 }
 
 export interface RoomState {
@@ -27,6 +28,7 @@ export interface RoomState {
   arenaIndex: number;
   round: number;
   players: Record<string, PlayerState>;
+  mapGrid?: number[][];
 }
 
 export interface JoinRequest {

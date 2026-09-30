@@ -61,7 +61,8 @@ export class RoomStore {
     room.status = 'playing';
     room.stage = 1;
     room.round = 1;
-    room.players = Object.fromEntries(Object.entries(room.players).map(([id, p], index) => [id, { ...p, hp: p.maxHp, x: 120 + index * 55, y: 180, ready: false }]));
+    const entrance = room.mapGrid?.flatMap((row, y) => row.map((tile, x) => tile === 2 ? { x: x * 40 + 20, y: y * 40 + 20 } : null)).find((point): point is { x: number; y: number } => point !== null) || { x: 120, y: 180 };
+    room.players = Object.fromEntries(Object.entries(room.players).map(([id, p], index) => [id, { ...p, hp: p.maxHp, x: entrance.x + index * 28, y: entrance.y, ready: false, lastInputAt: undefined }]));
     room.lastActiveAt = Date.now();
   }
 
