@@ -19,6 +19,12 @@ with sync_playwright() as pw:
             page.locator('#graphicsQuality').select_option('high')
             page.locator('#frontClose').click()
         page.locator('[data-menu=play]').click()
+    pages[0].evaluate("""() => {
+      const grid=Array.from({length:16},(_,y)=>Array.from({length:20},(_,x)=>x===0||y===0||x===19||y===15?1:0));
+      grid[5][3]=2; grid[5][4]=11; grid[5][8]=1; grid[8][9]=4; grid[13][18]=7; grid[14][18]=3;
+      OMR.selectedMap=()=>({name:'Browser relic regression',grid,stageCount:2,chestPricing:{baseCost:0,increase:0}});
+    }""")
+    pages[0].locator('#frontBody select').select_option('custom')
     pages[0].get_by_role('button', name='Create / join room', exact=True).click()
     pages[0].wait_for_function('!!window.OMRNetwork.state')
     code = pages[0].evaluate('OMRNetwork.state.code')
@@ -28,6 +34,14 @@ with sync_playwright() as pw:
     pages[0].get_by_role('button', name='Start run', exact=True).click()
     for p in pages: p.wait_for_function('OMRNetwork.active')
     pages[0].wait_for_timeout(300)
+    pages[0].bring_to_front()
+    pages[0].keyboard.press('e')
+    pages[0].wait_for_function("OMRNetwork.state.players[OMRNetwork.state.hostId].choices.length === 3")
+    pages[0].locator('#inventory button').first.click()
+    pages[0].wait_for_function("""() => {
+      const player=OMRNetwork.state.players[OMRNetwork.state.hostId];
+      return player.choices.length===0 && Object.keys(player.items).length===1;
+    }""")
     assert pages[0].evaluate('OMRV11.meta.settings.graphicsQuality') == 'high'
     Path('test-results').mkdir(exist_ok=True)
     pages[0].locator('#canvasWrap').screenshot(path='test-results/v122-detailed.png')
@@ -56,7 +70,7 @@ with sync_playwright() as pw:
     after = pages[1].evaluate('OMRNetwork.state.world.time')
     assert after>before+.4
     assert not errors, errors
-    print('PASS: detailed and low graphics modes render; movement exceeds 140 px, both clients agree, menus keep world running', flush=True)
+    print('PASS: relic choice UI, detailed/low graphics, synchronized movement, and live menus', flush=True)
     for c in contexts: c.close()
     browser.close()
 

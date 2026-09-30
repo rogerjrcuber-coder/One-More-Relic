@@ -13,9 +13,16 @@ try{
  const ja=await ack(a,'room:join',{protocol:12,mode:'dungeon',name:'Test host'});
  let sa,sb;a.on('room:state',r=>sa=r);b.on('room:state',r=>sb=r);
  const grid=Array.from({length:16},(_,y)=>Array.from({length:20},(_,x)=>x===0||y===0||x===19||y===15?1:0));
- grid[5][3]=2;grid[14][18]=3;grid[13][18]=7;grid[5][8]=1;grid[8][9]=4;
- await ack(a,'room:start',{map:{name:'Network regression',grid,stageCount:2}});
+ grid[5][3]=2;grid[5][4]=11;grid[14][18]=3;grid[13][18]=7;grid[5][8]=1;grid[8][9]=4;
+ await ack(a,'room:start',{map:{name:'Network regression',grid,stageCount:2,chestPricing:{baseCost:0,increase:0}}});
  await wait(100);
+ await ack(a,'player:action',{type:'interact'});
+ const offered=(await ack(a,'room:sync')).room.players[a.id].choices;
+ assert.equal(offered.length,3,'opening a vault must offer three relics');
+ await ack(a,'player:action',{type:'relic',id:offered[0]});
+ const selected=(await ack(a,'room:sync')).room.players[a.id];
+ assert.equal(selected.choices.length,0,'selecting a relic must close the offer');
+ assert.equal(selected.items[offered[0]],1,'selected relic must be added exactly once');
  const jb=await ack(b,'room:join',{protocol:12,mode:'dungeon',name:'Late guest',code:ja.code});
  assert.equal(jb.room.status,'playing','late join must enter the active custom room');
  assert.equal(jb.room.world.map.name,'Network regression / Stage 1','late join must receive the active custom map stage');

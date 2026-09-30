@@ -4,7 +4,7 @@ const local=['localhost','127.0.0.1'].includes(location.hostname);
 const endpoint=local?location.origin:(document.querySelector('meta[name="omr-server-url"]')?.content.trim()||location.origin);
 const palette={moss:['#17281d','#465940','#c3d695'],crystal:['#142338','#587998','#95e5ff'],sunken:['#112b34','#456b72','#87d8d3'],forge:['#311c19','#7f5142','#ffad72'],gardens:['#202d17','#5a7041','#c4e49a']};
 const colors={moss:'#cce6a2',ember:'#ee9b6b',frost:'#8fc9e8',void:'#bb9be5',gold:'#e4c36f',creator:'#ec719c'};
-let socket,room,map,selfId,active=false,seq=0,pending=[],predicted,states=[],keys=new Set(),mouse={x:0,y:0,down:false},dash=false,light=false,stick={x:0,y:0},acc=0,last=performance.now(),latency=0,mode='dungeon',generation=0;
+let socket,room,map,selfId,active=false,seq=0,pending=[],predicted,states=[],keys=new Set(),mouse={x:0,y:0,down:false},dash=false,light=false,stick={x:0,y:0},acc=0,last=performance.now(),latency=0,mode='dungeon',generation=0,inventorySignature='',partySignature='';
 const canvas=$('game'),ctx=canvas.getContext('2d');let view={x:0,y:0,scale:1,w:800,h:600};
 window.OMRNetwork={get active(){return active;},get state(){return room;},get predicted(){return predicted;},open:openLobby,publish:async map=>{await connect();const published=await rpc('maps:publish',map);openLobby('dungeon',false,published.id);}};
 const text=(parent,tag,value)=>{const n=document.createElement(tag);n.textContent=value;parent.append(n);return n;};
@@ -17,7 +17,7 @@ async function connect(){
   socket?.disconnect();socket=window.io(endpoint,{reconnection:false,timeout:5000});
   socket.on('room:state',receive);
   socket.on('latency:probe',ack=>ack());
-  socket.on('server:hello',h=>{if(h.protocol!==PROTOCOL){error('Server update required: deploy v1.2.2 before playing.');socket.disconnect();}});
+  socket.on('server:hello',h=>{if(h.protocol!==PROTOCOL){error('Server update required: deploy v1.2.3 before playing.');socket.disconnect();}});
   socket.on('disconnect',()=>{if(active){keys.clear();mouse.down=false;pending=[];active=false;error('Connection lost. Rejoin your party from Play.');}});
   await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('connect_error',()=>reject(Error('Cannot reach the game server.')));});
 }
@@ -84,13 +84,15 @@ function hud(){
   $('chestCost').textContent=(map.chestPricing.baseCost+map.chestPricing.increase*w.chestsOpened)+' gold';
   $('chestCostNote').textContent='+'+map.chestPricing.increase+' after each opening';
   $('worldMessage').textContent=w.message;$('worldMessage').classList.toggle('hidden',!w.message);
-  const inv=$('inventory');inv.replaceChildren();for(const [id,n]of Object.entries({...p.items,...p.upgrades}))text(inv,'p',id+' x'+n);
-  if(p.choices.length){text(inv,'p','Choose a relic:');for(const id of p.choices)button(inv,id,()=>act('relic',{id}));}
+  const inv=$('inventory'),nextInventorySignature=JSON.stringify([p.items,p.upgrades,p.choices]);
+  if(nextInventorySignature!==inventorySignature){inventorySignature=nextInventorySignature;inv.replaceChildren();for(const [id,n]of Object.entries({...p.items,...p.upgrades}))text(inv,'p',id+' x'+n);
+    if(p.choices.length){text(inv,'p','Choose a relic:');for(const id of p.choices)button(inv,id,()=>act('relic',{id}));}}
   $('relicCount').textContent=Object.values(p.items).reduce((a,b)=>a+b,0);
   let party=$('partyPanel');if(!party){party=document.createElement('div');party.id='partyPanel';$('synergy').before(party);}
-  party.replaceChildren();text(party,'h3','Party / '+Math.round(latency)+' ms');
-  for(const peer of Object.values(room.players)){button(party,peer.name+' / '+Math.ceil(peer.hp)+' HP / '+peer.score+' points'+(peer.downed?' / DOWNED':''),()=>inspect(peer.id));if(Object.keys(peer.statuses).length)text(party,'small',Object.keys(peer.statuses).join(', '));}
-  button(party,'Ping location (Q)',()=>act('ping',{x:predicted.x,y:predicted.y}));button(party,'Drink potion (H)',()=>act('potion'));button(party,'Emotes',()=>{const b=show('Say it without words');for(const value of ['Wave','Laugh','Point','Dance','Thumbs up'])button(b,value,()=>{act('emote',{value});$('frontModal').close();});});
+  const nextPartySignature=JSON.stringify([Math.round(latency/25),Object.values(room.players).map(peer=>[peer.id,peer.name,Math.ceil(peer.hp),peer.score,peer.downed,Object.keys(peer.statuses)])]);
+  if(nextPartySignature!==partySignature){partySignature=nextPartySignature;party.replaceChildren();text(party,'h3','Party / '+Math.round(latency)+' ms');
+    for(const peer of Object.values(room.players)){button(party,peer.name+' / '+Math.ceil(peer.hp)+' HP / '+peer.score+' points'+(peer.downed?' / DOWNED':''),()=>inspect(peer.id));if(Object.keys(peer.statuses).length)text(party,'small',Object.keys(peer.statuses).join(', '));}
+    button(party,'Ping location (Q)',()=>act('ping',{x:predicted.x,y:predicted.y}));button(party,'Drink potion (H)',()=>act('potion'));button(party,'Emotes',()=>{const b=show('Say it without words');for(const value of ['Wave','Laugh','Point','Dance','Thumbs up'])button(b,value,()=>{act('emote',{value});$('frontModal').close();});});}
 }
 function inspect(id){const p=room.players[id],b=show(p.name+' / build');text(b,'p',p.weapon+' / '+p.perk);text(b,'p',JSON.stringify({relics:p.items,upgrades:p.upgrades}));if(id!==selfId&&room.mode!=='duel')for(const kind of ['gold','keys','potions'])button(b,'Give 1 '+kind,()=>act('trade',{target:id,kind,amount:1}));}
 async function leave(){const was=active;active=false;pending=[];states=[];keys.clear();if(socket?.connected)await rpc('room:leave').catch(()=>{});room=null;map=null;selfId=null;socket?.disconnect();if(was)location.reload();else $('frontModal').close();}

@@ -12,9 +12,9 @@ const app=express(),http=createServer(app);
 const allowed=process.env.PUBLIC_ORIGIN?.split(',').map(s=>s.trim()).filter(Boolean);
 const io=new Server(http,{cors:{origin:allowed?.length?allowed:true},maxHttpBufferSize:200000});
 const rooms=new RoomStore(),maps=new Map<string,{map:GameMap;idleSince:number;owner:string}>();
-const build=process.env.RAILWAY_GIT_COMMIT_SHA||'local-v1.2.2';
+const build=process.env.RAILWAY_GIT_COMMIT_SHA||'local-v1.2.3';
 app.use(helmet({contentSecurityPolicy:false}));
-app.get('/api/health',(_q,r)=>r.json({ok:true,protocol:PROTOCOL,build,version:'1.2.2',rooms:rooms.rooms.size}));
+app.get('/api/health',(_q,r)=>r.json({ok:true,protocol:PROTOCOL,build,version:'1.2.3',rooms:rooms.rooms.size}));
 app.use(express.static(resolve('dist/public'),{maxAge:0}));
 app.get('/',(_q,r)=>r.sendFile(resolve('dist/public/index.html')));
 function snapshot(r:RoomState,includeMap=false){
@@ -26,10 +26,10 @@ function emit(r:RoomState,full=false){io.to(r.code).emit('room:state',snapshot(r
 type Ack=(v:unknown)=>void;
 const callback=(raw:unknown,ack?:Ack):Ack|undefined=>typeof raw==='function'?raw as Ack:typeof ack==='function'?ack:undefined;
 io.on('connection',socket=>{
-  socket.emit('server:hello',{protocol:PROTOCOL,build,version:'1.2.2'});
+  socket.emit('server:hello',{protocol:PROTOCOL,build,version:'1.2.3'});
   const fail=(ack:Ack|undefined,error:unknown)=>ack?.({ok:false,error:error instanceof Error?error.message:String(error)});
   socket.on('room:join',(raw:JoinRequest,ack?:Ack)=>{try{
-    if(raw?.protocol!==PROTOCOL)throw Error('Game update required. Reload to use multiplayer v1.2.2.');
+    if(raw?.protocol!==PROTOCOL)throw Error('Game update required. Reload to use multiplayer v1.2.3.');
     const r=rooms.join(socket.id,raw);socket.join(r.code);ack?.({ok:true,code:r.code,playerId:socket.id,room:snapshot(r,true)});emit(r,true);
   }catch(e){fail(ack,e);}});
   socket.on('room:start',(raw:{map?:unknown;mapId?:string},ack?:Ack)=>{try{
@@ -40,7 +40,7 @@ io.on('connection',socket=>{
   }catch(e){fail(ack,e);}});
   socket.on('player:input',(raw:unknown)=>{const r=rooms.findByPlayer(socket.id),p=r?.players[socket.id];if(r&&p)receiveInput(r,p,raw,Date.now());});
   let lastAction=0;
-  socket.on('player:action',(raw:unknown,ack?:Ack)=>{const r=rooms.findByPlayer(socket.id),p=r?.players[socket.id];if(!r||!p)return fail(ack,'Join a run');const now=Date.now();if(now-lastAction<150)return fail(ack,'Please wait');lastAction=now;const error=action(r,p,raw);ack?.(error?{ok:false,error}:{ok:true});});
+  socket.on('player:action',(raw:unknown,ack?:Ack)=>{const r=rooms.findByPlayer(socket.id),p=r?.players[socket.id];if(!r||!p)return fail(ack,'Join a run');const now=Date.now(),type=raw&&typeof raw==='object'?String((raw as {type?:unknown}).type):'';if(type!=='relic'&&now-lastAction<150)return fail(ack,'Please wait');if(type!=='relic')lastAction=now;const error=action(r,p,raw);ack?.(error?{ok:false,error}:{ok:true});});
   socket.on('room:sync',(raw:unknown,ack?:Ack)=>{const done=callback(raw,ack),r=rooms.findByPlayer(socket.id);if(r)done?.({ok:true,room:snapshot(r,true)});else done?.({ok:false,error:'Join a room first'});});
   socket.on('room:leave',(raw:unknown,ack?:Ack)=>{const done=callback(raw,ack),r=rooms.leave(socket.id);if(r){socket.leave(r.code);if(rooms.rooms.has(r.code))emit(r);}done?.({ok:true});});
   socket.on('latency',(_value:unknown,ack?:Ack)=>{ack?.({ok:true});});
@@ -56,6 +56,6 @@ const timer=setInterval(()=>{
   const wall=Date.now();for(const [id,m]of maps){if([...rooms.rooms.values()].some(r=>r.mapId===id&&Object.keys(r.players).length))m.idleSince=wall;else if(wall-m.idleSince>=3600000)maps.delete(id);}
 },1000/30).unref();
 const port=Number(process.env.PORT||8000),host=process.env.HOST||'127.0.0.1';
-http.listen(port,host,()=>console.log('One More Relic 1.2.2 protocol '+PROTOCOL+' at http://'+host+':'+port+' build '+build));
+http.listen(port,host,()=>console.log('One More Relic 1.2.3 protocol '+PROTOCOL+' at http://'+host+':'+port+' build '+build));
 http.on('close',()=>clearInterval(timer));
 export {http,io,rooms,snapshot};
