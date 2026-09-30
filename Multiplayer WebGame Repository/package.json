@@ -1,32 +1,32 @@
-﻿{
-    "name":  "one-more-relic",
-    "version":  "1.2.1",
-    "private":  true,
-    "type":  "module",
-    "scripts":  {
-                    "dev":  "tsx watch server/index.ts",
-                    "build":  "tsc -p tsconfig.json \u0026\u0026 node scripts/build.mjs",
-                    "start":  "node dist/server/index.js",
-                    "typecheck":  "tsc -p tsconfig.json --noEmit",
-                    "test":  "node --test --test-isolation=none dist/server/**/*.test.js",
-                    "test:multiplayer":  "node scripts/multiplayer_smoke.mjs"
-                },
-    "dependencies":  {
-                         "@socket.io/admin-ui":  "^0.5.1",
-                         "cors":  "^2.8.5",
-                         "express":  "^5.1.0",
-                         "helmet":  "^8.1.0",
-                         "socket.io":  "^4.8.1"
-                     },
-    "devDependencies":  {
-                            "@types/cors":  "^2.8.19",
-                            "@types/express":  "^5.0.3",
-                            "@types/node":  "^24.10.0",
-                            "socket.io-client":  "^4.8.1",
-                            "tsx":  "^4.20.6",
-                            "typescript":  "^5.9.3"
-                        },
-    "engines":  {
-                    "node":  "\u003e=22 \u003c25"
-                }
+{
+    "name": "one-more-relic",
+    "version": "1.2.2",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch server/index.ts",
+        "build": "tsc -p tsconfig.json && node scripts/build.mjs",
+        "start": "node dist/server/index.js",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "test": "node --test --test-isolation=none dist/server/**/*.test.js",
+        "test:multiplayer": "node scripts/multiplayer_smoke.mjs"
+    },
+    "dependencies": {
+        "@socket.io/admin-ui": "^0.5.1",
+        "cors": "^2.8.5",
+        "express": "^5.1.0",
+        "helmet": "^8.1.0",
+        "socket.io": "^4.8.1"
+    },
+    "devDependencies": {
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.3",
+        "@types/node": "^24.10.0",
+        "socket.io-client": "^4.8.1",
+        "tsx": "^4.20.6",
+        "typescript": "^5.9.3"
+    },
+    "engines": {
+        "node": ">=22 <25"
+    }
 }

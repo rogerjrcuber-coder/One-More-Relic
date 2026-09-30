@@ -29,6 +29,7 @@ test('cooperative trading is atomic and cannot debit other players',()=>{
 });
 test('chest rewards and doors have one authoritative transaction',()=>{
   const {room}=run(),w=room.world!,a=room.players.a!,b=room.players.b!,c=w.chests[0]!;
+  w.chests=[c];w.map.features=[];
   a.x=b.x=c.x;a.y=b.y=c.y;a.gold=b.gold=100;
   assert.equal(action(room,a,{type:'interact'}),'');const spent=a.gold;
   action(room,b,{type:'interact'});assert.equal(w.chestsOpened,1);assert.equal(a.gold,spent);assert.equal(b.gold,100);

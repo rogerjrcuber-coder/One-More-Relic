@@ -1,4 +1,4 @@
-# One More Relic v1.2.1
+# One More Relic v1.2.2
 
 A top-down dungeon crawler built around short multiplayer expeditions, player-made dungeons, escalating run upgrades, rare relic combinations, and a rolling duel playlist.
 
@@ -39,6 +39,8 @@ Dungeon stages use branching modular layouts across Mosskeep, Crystal Caverns, S
 - P: pause
 
 Touch devices use the movement pad, automatic targeting, and on-screen Dash/Open controls.
+
+Graphics Quality defaults to Detailed. Choose Low / potato mode in Settings to reduce render resolution, wall-aware light rays, particles, glow, and texture detail.
 
 ## Progression and saves
 
