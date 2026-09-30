@@ -71,3 +71,16 @@ npm run test:multiplayer
 ```
 
 Screenshots are written to `test-results/`. All game art is drawn locally with Canvas and CSS.
+
+## Railway deployment
+
+This repository includes `Multiplayer WebGame Repository/railway.json` for deploying the Node/Socket.IO server through GitHub. In Railway, create a service from this repository, set the service root directory to `Multiplayer WebGame Repository`, and use the generated public Railway URL as the backend address.
+
+Set these variables in Railway:
+
+```text
+HOST=0.0.0.0
+PUBLIC_ORIGIN=https://your-sites-domain.example
+```
+
+Railway supplies `PORT` automatically. The service uses `npm ci && npm run build`, starts with `npm start`, and checks `/api/health`. The frontend's `omr-server-url` meta tag should contain the Railway URL when the frontend remains on Sites; leave it empty when Railway serves the frontend and backend from the same origin.

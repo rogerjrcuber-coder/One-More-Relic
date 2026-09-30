@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="omr-server-url" content="">
   <meta name="theme-color" content="#101915">
-  <title>One More Relic · Local Playtest</title>
+  <title>One More Relic Â· Local Playtest</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23c0e697' d='M32 4 56 25 32 60 8 25Z'/%3E%3Cpath fill='%23101915' d='M32 16 43 27 32 45 21 27Z'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
-  <script src="/socket.io/socket.io.js" defer></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>
   <script src="game.js" defer></script>
   <script src="v11.js" defer></script>
 </head>
@@ -16,9 +17,9 @@
     <canvas id="titleCanvas" aria-hidden="true"></canvas>
     <div class="title-shade"></div>
     <div class="title-content">
-      <div class="title-logo"><span>◈</span><div><small>ENTER TOGETHER. LEAVE A LEGEND.</small><h1>ONE MORE <b>RELIC</b></h1><p>Build the dungeon. Break the build. Go once more.</p></div></div>
+      <div class="title-logo"><span>â—ˆ</span><div><small>ENTER TOGETHER. LEAVE A LEGEND.</small><h1>ONE MORE <b>RELIC</b></h1><p>Build the dungeon. Break the build. Go once more.</p></div></div>
       <nav class="title-nav" aria-label="Main menu">
-        <button class="title-primary" data-menu="play">PLAY <span>Start or join a room ↗</span></button>
+        <button class="title-primary" data-menu="play">PLAY <span>Start or join a room â†—</span></button>
         <button data-menu="quickplay">QUICKPLAY <span>The fastest way in</span></button>
         <button data-menu="creator">DUNGEON CREATOR <span>Build a temporary world</span></button>
         <button data-menu="loadouts">LOADOUTS <span>Prepare your starting kit</span></button>
@@ -27,56 +28,56 @@
       </nav>
       <div class="title-status"><i></i><span id="serverStatus">LOCAL MODE READY</span><small>NO ACCOUNT REQUIRED</small></div>
     </div>
-    <div class="title-card"><span>TONIGHT'S DUNGEON</span><strong>The Mosskeep</strong><p>Two stages · Gloom · The Mosskeeper</p><div><b>◷</b> Published worlds expire after 60 idle minutes.</div></div>
+    <div class="title-card"><span>TONIGHT'S DUNGEON</span><strong>The Mosskeep</strong><p>Two stages Â· Gloom Â· The Mosskeeper</p><div><b>â—·</b> Published worlds expire after 60 idle minutes.</div></div>
   </section>
-  <dialog id="frontModal" class="front-modal"><button id="frontClose" class="icon-button front-close" aria-label="Close">×</button><div id="frontBody"></div></dialog>
+  <dialog id="frontModal" class="front-modal"><button id="frontClose" class="icon-button front-close" aria-label="Close">Ã—</button><div id="frontBody"></div></dialog>
   <header class="header">
-    <a class="brand" href="./" aria-label="One More Relic home"><span class="brand-mark">◈</span><span>ONE MORE <b>RELIC</b><small>DUNGEONS ARE BETTER WITH A LITTLE GREED.</small></span></a>
-    <nav aria-label="Main"><button class="nav active" id="playTab">The dungeon</button><button class="nav" id="editorOpen">Workshop <span>↗</span></button><button class="nav" id="codexOpen">Relic codex</button></nav>
+    <a class="brand" href="./" aria-label="One More Relic home"><span class="brand-mark">â—ˆ</span><span>ONE MORE <b>RELIC</b><small>DUNGEONS ARE BETTER WITH A LITTLE GREED.</small></span></a>
+    <nav aria-label="Main"><button class="nav active" id="playTab">The dungeon</button><button class="nav" id="editorOpen">Workshop <span>â†—</span></button><button class="nav" id="codexOpen">Relic codex</button></nav>
     <span class="local-badge"><i></i> LOCAL PLAYTEST</span>
   </header>
   <main>
     <section class="intro"><div><div class="eyebrow">A SMALL DOOR. A VERY BAD IDEA.</div><h1>Just one more room.</h1><p>Make a build. Break a dungeon. Come back for the relic you missed.</p></div><button class="subtle" id="helpOpen">How to play <span>?</span></button></section>
     <section class="layout">
       <aside class="panel expedition">
-        <div class="section-label"><span>01 / EXPEDITION</span><span>✦</span></div>
+        <div class="section-label"><span>01 / EXPEDITION</span><span>âœ¦</span></div>
         <h2>Pick your trouble.</h2>
         <label for="mapSelect">DUNGEON</label><select id="mapSelect"></select>
-        <div class="map-meta"><span id="mapKind">CURATED DUNGEON</span><span id="mapSize">48 × 34</span></div>
+        <div class="map-meta"><span id="mapKind">CURATED DUNGEON</span><span id="mapSize">48 Ã— 34</span></div>
         <p id="mapDescription" class="muted">An overgrown vault with a keeper who doesn't like visitors.</p>
-        <div class="rule-card"><span>◷</span><p><strong>Stay a little longer.</strong><br>Published maps disappear after an hour without players. Your blueprints stay saved.</p></div>
+        <div class="rule-card"><span>â—·</span><p><strong>Stay a little longer.</strong><br>Published maps disappear after an hour without players. Your blueprints stay saved.</p></div>
         <div class="divider"></div>
-        <div class="section-label"><span>02 / YOUR LOADOUT</span><button class="text-button" id="presetsOpen">Saved presets ↗</button></div>
-        <label for="weapon">WEAPON</label><select id="weapon"><option value="wand">Ember wand · piercing bolts</option><option value="repeater">Needle repeater · rapid fire</option><option value="scatter">Shard lantern · three-shot spread</option></select>
-        <label for="perk">STARTER PERK</label><select id="perk"><option value="vigor">Stout heart · +25 max health</option><option value="swift">Light feet · +15% move speed</option><option value="moss">Moss blessing · heal on pickup</option></select>
-        <button id="savePreset" class="subtle full">＋ Save this loadout</button>
-        <button id="start" class="primary full">Enter the dungeon <span>↗</span></button>
-        <p class="footnote">Solo prototype · no account needed<br>WASD to move · hold click to attack</p>
+        <div class="section-label"><span>02 / YOUR LOADOUT</span><button class="text-button" id="presetsOpen">Saved presets â†—</button></div>
+        <label for="weapon">WEAPON</label><select id="weapon"><option value="wand">Ember wand Â· piercing bolts</option><option value="repeater">Needle repeater Â· rapid fire</option><option value="scatter">Shard lantern Â· three-shot spread</option></select>
+        <label for="perk">STARTER PERK</label><select id="perk"><option value="vigor">Stout heart Â· +25 max health</option><option value="swift">Light feet Â· +15% move speed</option><option value="moss">Moss blessing Â· heal on pickup</option></select>
+        <button id="savePreset" class="subtle full">ï¼‹ Save this loadout</button>
+        <button id="start" class="primary full">Enter the dungeon <span>â†—</span></button>
+        <p class="footnote">Solo prototype Â· no account needed<br>WASD to move Â· hold click to attack</p>
       </aside>
       <section class="arena-panel" aria-label="Dungeon game">
         <div class="arena-top"><div><i class="status-dot"></i><span id="arenaName">THE MOSSKEEP</span><span id="roomCode" class="room-code hidden"></span></div><span id="phase">READY TO EXPLORE</span></div>
         <div class="canvas-wrap" id="canvasWrap"><canvas id="game" width="1120" height="800" aria-label="Dungeon arena. Move with WASD or arrow keys, aim with mouse, hold click to attack, Space to dodge, E to open chests."></canvas>
-          <div class="preview-overlay" id="preview"><div class="rune">◈</div><span class="eyebrow">THE VAULT IS WAITING</span><h2>Fortune favors<br>the foolish.</h2><p>Find relics. Stack their power.<br>Defeat the keeper and reach the exit.</p><button class="primary" id="quickStart">Take the first step ↗</button></div>
-          <div class="game-hud hidden" id="hud"><div class="player-meters"><div class="health-wrap"><div><span>YOUR HEALTH</span><strong id="healthText">125 / 125</strong></div><div class="health-track"><i id="healthBar"></i></div></div><button id="lanternToggle" class="lantern-toggle" aria-pressed="false" title="L: toggle wide beam. Recharges near torches."><span id="lanternText">L · WIDE BEAM · 100%</span><span class="lantern-track"><i id="lanternBar"></i></span></button></div><span id="runClock">00:00</span></div>
+          <div class="preview-overlay" id="preview"><div class="rune">â—ˆ</div><span class="eyebrow">THE VAULT IS WAITING</span><h2>Fortune favors<br>the foolish.</h2><p>Find relics. Stack their power.<br>Defeat the keeper and reach the exit.</p><button class="primary" id="quickStart">Take the first step â†—</button></div>
+          <div class="game-hud hidden" id="hud"><div class="player-meters"><div class="health-wrap"><div><span>YOUR HEALTH</span><strong id="healthText">125 / 125</strong></div><div class="health-track"><i id="healthBar"></i></div></div><button id="lanternToggle" class="lantern-toggle" aria-pressed="false" title="L: toggle wide beam. Recharges near torches."><span id="lanternText">L Â· WIDE BEAM Â· 100%</span><span class="lantern-track"><i id="lanternBar"></i></span></button></div><span id="runClock">00:00</span></div>
           <div id="worldMessage" class="world-message hidden" role="status"></div>
           <div id="touchControls" class="touch-controls hidden"><div id="joystick" aria-label="Drag to move"><span></span></div><div class="touch-actions"><button id="touchInteract" aria-label="Open nearby chest">OPEN</button><button id="touchDash" aria-label="Dodge">DASH</button></div></div>
-          <div id="result" class="result hidden"><span class="eyebrow" id="resultLabel">EXPEDITION COMPLETE</span><h2 id="resultTitle">A little richer.</h2><p id="resultText"></p><button class="primary" id="retry">One more run ↗</button><button class="subtle" id="returnCamp">Return to camp</button></div>
+          <div id="result" class="result hidden"><span class="eyebrow" id="resultLabel">EXPEDITION COMPLETE</span><h2 id="resultTitle">A little richer.</h2><p id="resultText"></p><button class="primary" id="retry">One more run â†—</button><button class="subtle" id="returnCamp">Return to camp</button></div>
         </div>
-        <div class="arena-bottom"><span><kbd>WASD</kbd> move <kbd>CLICK</kbd> fire <kbd>SPACE</kbd> dash <kbd>E</kbd> chest <kbd>L</kbd> light</span><button class="text-button" id="pause" disabled>Pause Ⅱ</button><button class="text-button" id="leave" disabled>Leave ↗</button></div>
+        <div class="arena-bottom"><span><kbd>WASD</kbd> move <kbd>CLICK</kbd> fire <kbd>SPACE</kbd> dash <kbd>E</kbd> chest <kbd>L</kbd> light</span><button class="text-button" id="pause" disabled>Pause â…¡</button><button class="text-button" id="leave" disabled>Leave â†—</button></div>
       </section>
-      <aside class="panel satchel"><div class="section-label"><span>03 / YOUR RUN</span><span>◇</span></div><h2>Small finds.<br>Big consequences.</h2>
+      <aside class="panel satchel"><div class="section-label"><span>03 / YOUR RUN</span><span>â—‡</span></div><h2>Small finds.<br>Big consequences.</h2>
         <div class="stage-progress"><span>STAGE</span><strong id="stageText">1 / 2</strong><div><i id="stageBar"></i></div></div>
         <div class="run-stats"><div><strong id="kills">0</strong><span>DEFEATED</span></div><div><strong id="gold">0</strong><span>GOLD TO SPEND</span></div></div>
         <div class="chest-cost-card"><span>NEXT CHEST</span><strong id="chestCost">3 gold</strong><small id="chestCostNote">+2 gold after each opening</small></div>
-        <div class="section-label inventory-title"><span>RELIC SATCHEL</span><span id="relicCount">0</span></div><div id="inventory"><div class="empty-inventory"><span>♧</span><p>A suspicious amount<br>of room for treasure.</p><small>Open chests to discover relics.<br>Duplicates make them stronger.</small></div></div>
+        <div class="section-label inventory-title"><span>RELIC SATCHEL</span><span id="relicCount">0</span></div><div id="inventory"><div class="empty-inventory"><span>â™§</span><p>A suspicious amount<br>of room for treasure.</p><small>Open chests to discover relics.<br>Duplicates make them stronger.</small></div></div>
         <div class="synergy" id="synergy"><span>FIELD NOTES</span><p>Echoes can spark storms.<br>Storms can scatter shards.<br>Choose a little chaos.</p></div>
-        <button class="text-button full" id="inventoryCodex">See all relics ↗</button>
+        <button class="text-button full" id="inventoryCodex">See all relics â†—</button>
       </aside>
     </section>
-    <section class="bottom-strip"><div><span>⌘</span><p><strong>Built by you.</strong> Paint a dungeon in the workshop.</p></div><div><span>◈</span><p><strong>Different every run.</strong> Find a combination that clicks.</p></div><div><span>◷</span><p><strong>Here while you are.</strong> One hour idle, then gone.</p></div></section>
-    <footer><span>ONE MORE RELIC <em> / </em> PROTOTYPE 0.2</span><span>Local solo play · loadouts & blueprints saved in this browser</span><button id="backupOpen" class="text-button">Back up your saves ↗</button></footer>
+    <section class="bottom-strip"><div><span>âŒ˜</span><p><strong>Built by you.</strong> Paint a dungeon in the workshop.</p></div><div><span>â—ˆ</span><p><strong>Different every run.</strong> Find a combination that clicks.</p></div><div><span>â—·</span><p><strong>Here while you are.</strong> One hour idle, then gone.</p></div></section>
+    <footer><span>ONE MORE RELIC <em> / </em> PROTOTYPE 0.2</span><span>Local solo play Â· loadouts & blueprints saved in this browser</span><button id="backupOpen" class="text-button">Back up your saves â†—</button></footer>
   </main>
-  <dialog id="modal"><div class="modal-top"><span class="eyebrow" id="modalEyebrow">ONE MORE RELIC</span><button id="modalClose" class="icon-button" aria-label="Close dialog">×</button></div><div id="modalBody"></div></dialog>
+  <dialog id="modal"><div class="modal-top"><span class="eyebrow" id="modalEyebrow">ONE MORE RELIC</span><button id="modalClose" class="icon-button" aria-label="Close dialog">Ã—</button></div><div id="modalBody"></div></dialog>
   <div id="toast" class="toast hidden" role="status"></div>
 </body>
 </html>

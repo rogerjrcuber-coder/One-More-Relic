@@ -8,7 +8,8 @@ import type { JoinRequest } from './types.js';
 
 const app = express();
 const http = createServer(app);
-const io = new Server(http, { cors: { origin: process.env.PUBLIC_ORIGIN || true }, maxHttpBufferSize: 1_000_000 });
+const allowedOrigins = process.env.PUBLIC_ORIGIN?.split(',').map(origin => origin.trim()).filter(Boolean);
+const io = new Server(http, { cors: { origin: allowedOrigins?.length ? allowedOrigins : true }, maxHttpBufferSize: 1_000_000 });
 const rooms = new RoomStore();
 const publicDir = resolve(process.cwd(), 'dist/public');
 
