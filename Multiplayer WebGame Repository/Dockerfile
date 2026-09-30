@@ -4,7 +4,7 @@ COPY package*.json tsconfig.json ./
 RUN npm ci
 COPY server ./server
 COPY scripts ./scripts
-COPY index.html style.css game.js ./
+COPY index.html style.css game.js v11.js ./
 RUN npm run build
 
 FROM node:24.21.0-alpine
