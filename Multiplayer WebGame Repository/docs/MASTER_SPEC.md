@@ -1,10 +1,10 @@
-One More Relic - Master Prompt v1.1
+One More Relic - Master Prompt, cumulative baseline through v1.2.1
 
-Current baseline: the original specification below plus [v1.1 additions and reworks](MASTER_SPEC_V1_1.md).
+Current baseline: the original specification below plus [v1.1](MASTER_SPEC_V1_1.md), [v1.2 multiplayer and mode rework](MASTER_SPEC_V1_2.md), and [v1.2.1 map variety rework](MASTER_SPEC_V1_2_1.md).
 
-The v1.1 requirements take precedence where they change v1.0: dungeon parties support 1–8 players, all dungeons have 2–5 stages, common upgrade chests and rare relic vaults are separate systems, and duels use a continuing 2–4 player playlist. Preserve the editable chest base cost and per-opening increase added after v1.0. Preserve existing saves through explicit migrations.
+The newest addendum takes precedence where requirements conflict. Preserve the editable chest base cost and per-opening increase, local loadouts and blueprints, and existing saves through explicit migrations.
 
-The source text below is retained as the original v1.0 specification for requirements not superseded by v1.1. This document describes the target product; README.md records the current implementation and validation status.
+The source text below is retained as the original v1.0 specification for requirements not superseded by later releases. README.md records the current implementation and validation status.
 
 ---
 

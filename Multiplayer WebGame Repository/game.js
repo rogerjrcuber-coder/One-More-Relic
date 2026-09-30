@@ -141,7 +141,7 @@
       'Defeat the boss, then step onto the green exit. Chargers show a warning line before lunging; enraged bosses attack faster.',
       'In the workshop, choose a map size and lighting mood. Monster and Boss brushes have editable stats, colors, and attack styles. Inspect edits one placed creature. Pan lets you drag around a large map.',
       'Published maps expire after one hour without an active player. Saved blueprints do not expire.',
-      'This prototype is solo and local. Browser tabs do not share combat. Online rooms and real multiplayer are not implemented.'
+      'Dungeon and Waves are cooperative. Duel is PvP. Multiplayer menus never pause the world. E also revives nearby teammates; Q pings, H drinks a potion, and the party panel supports trading and build inspection.'
     ]){const li=document.createElement('li');li.textContent=text;list.append(li);}body.append(list);
   };
   function saveLoadout(){mutate(d=>d.lastLoadout={weapon:$('weapon').value,perk:$('perk').value});}
@@ -198,7 +198,7 @@
       delete editor.creatures[key];editor.grid[y][x]=tool;if(tool===4||tool===7)editor.creatures[key]=sanitizeCreature(brushes[tool],tool===7);drawEditor();}
     let panPoint=null;ec.onpointerdown=e=>{editorDrawing=true;panPoint={x:e.clientX,y:e.clientY};ec.setPointerCapture(e.pointerId);paint(e);};ec.onpointermove=e=>{if(!editorDrawing)return;if(tool==='pan'&&panPoint){scroll.scrollLeft-=e.clientX-panPoint.x;scroll.scrollTop-=e.clientY-panPoint.y;panPoint={x:e.clientX,y:e.clientY};}else paint(e);};ec.onpointerup=ec.onpointercancel=()=>{editorDrawing=false;panPoint=null;};
     const actions=document.createElement('div');actions.className='modal-actions';
-    button(actions,'Publish & play ↗',()=>{const issue=validateMap(editor.grid);if(issue){error.textContent=issue;return;}if(!editor.name.trim()){error.textContent='Give your dungeon a name.';return;}if(readData().maps.length>=20){error.textContent='You have 20 published maps. Remove one from Manage maps first.';return;}if(!saveBlueprint())return;const map={id:uid(),name:editor.name.trim(),...clone(mapDetails(editor)),idleSince:Date.now(),sessions:{}};mutate(d=>d.maps.push(map));closeModal();if(game?.status==='playing')endRun('left');updateMaps(map.id);startRun();},'primary');
+    button(actions,'Publish & play ↗',async()=>{const issue=validateMap(editor.grid);if(issue){error.textContent=issue;return;}if(!editor.name.trim()){error.textContent='Give your dungeon a name.';return;}if(!saveBlueprint())return;try{await window.OMRNetwork.publish({name:editor.name.trim(),...clone(mapDetails(editor))});closeModal();}catch(e){error.textContent=e.message;}},'primary');
     button(actions,'Save blueprint',()=>{if(saveBlueprint())toast('Blueprint saved. It will not expire.');});
     button(actions,'New blank map',()=>{const [w,h]=size.value.split(',').map(Number);editor={id:uid(),name:'Untitled dungeon',grid:blankGrid(w,h),creatures:{},lighting:'gloom',stageCount:2,chestSchema:'v11'};openEditor();});
     button(actions,'New compact map',()=>{editor={id:uid(),name:'Untitled dungeon',grid:blankGrid(28,20),creatures:{},lighting:'gloom',stageCount:2,chestSchema:'v11'};openEditor();});
@@ -462,7 +462,7 @@
     circle(x+game.player.x/TILE*scale,y+game.player.y/TILE*scale,2.5,'#dfefbb');ctx.fillStyle='#93a486';ctx.font='8px sans-serif';ctx.textAlign='left';ctx.fillText('EXPLORED',x,y+h*scale+13);
   }
   function drawPlayer(p,t){ctx.save();circle(p.x,p.y+12,14,'#030c08a0');if(p.inv>0&&Math.floor(t*20)%2)ctx.globalAlpha=.5;const bob=Math.sin(t*8)*1.2;ctx.translate(p.x,p.y+bob);ctx.fillStyle=p.skinColor||'#cce6a2';ctx.beginPath();ctx.moveTo(0,-14);ctx.quadraticCurveTo(15,-7,13,12);ctx.lineTo(-13,12);ctx.quadraticCurveTo(-15,-7,0,-14);ctx.fill();rounded(-8,-6,16,10,4,'#273d2c');circle(-3,-2,1.5,'#f0efd4');circle(3,-2,1.5,'#f0efd4');ctx.strokeStyle='#e0c491';ctx.lineWidth=3;const target=aimPoint(),a=Math.atan2(target.y-p.y,target.x-p.x);ctx.beginPath();ctx.moveTo(Math.cos(a)*8,Math.sin(a)*8);ctx.lineTo(Math.cos(a)*24,Math.sin(a)*24);ctx.stroke();diamond(Math.cos(a)*24,Math.sin(a)*24,4,weapons[p.weapon].color);ctx.restore();if(p.dashCD<=0){ctx.strokeStyle='#bbd59460';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p.x,p.y+1,19,0,Math.PI*2);ctx.stroke();}}
-  function frame(now){let dt=Math.min((now-lastFrame)/1000,.05);lastFrame=now;while(dt>0){const step=Math.min(dt,1/120);update(step);dt-=step;}draw();if(now-lastHUD>100){updateHUD();lastHUD=now;}requestAnimationFrame(frame);}
+  function frame(now){if(window.OMRNetwork?.active){lastFrame=now;requestAnimationFrame(frame);return;}let dt=Math.min((now-lastFrame)/1000,.05);lastFrame=now;while(dt>0){const step=Math.min(dt,1/120);update(step);dt-=step;}draw();if(now-lastHUD>100){updateHUD();lastHUD=now;}requestAnimationFrame(frame);}
   window.addEventListener('keydown',e=>{if($('modal').open||['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))return;const k=e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k)&&game?.status==='playing')e.preventDefault();keys.add(k);if(!e.repeat){if(k===' ')dash();if(k==='e')interact();if(k==='p')pauseRun();if(k==='l')toggleLantern();}});
   window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
   window.addEventListener('blur',()=>{keys.clear();pointer.down=false;stick={x:0,y:0};if(game?.status==='playing'&&!game.paused){game.paused=true;$('pause').textContent='Resume ▷';}});
@@ -481,5 +481,5 @@
   setInterval(()=>{heartbeat();const removed=sweepMaps();if(removed&&!game){updateMaps();toast(`${removed} idle dungeon${removed>1?'s':''} expired. Blueprints are safe.`);}},5000);setInterval(updateV11HUD,200);
   const initial=readData();$('weapon').value=initial.lastLoadout.weapon;$('perk').value=initial.lastLoadout.perk;updateMaps();resize();requestAnimationFrame(frame);if(!storageOK)toast('Storage is unavailable. You can play, but export saves before closing.');
   // Expose pure validation for smoke tests; no gameplay or persistence bypass.
-  window.OMR={validateMap,demoMap,normalize,getSelectedMapGrid:()=>{const id=$('mapSelect')?.value;const map=allMaps().find(x=>x.id===id)||demo;return map.grid.map(row=>row.slice());},version:'0.2'};
+  window.OMR={validateMap,demoMap,normalize,selectedMap:()=>clone(allMaps().find(m=>m.id===$('mapSelect').value)||demo),getSelectedMapGrid:()=>{const id=$('mapSelect')?.value;const map=allMaps().find(x=>x.id===id)||demo;return map.grid.map(row=>row.slice());},version:'1.2.1'};
 })();

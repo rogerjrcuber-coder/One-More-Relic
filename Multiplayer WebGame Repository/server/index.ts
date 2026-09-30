@@ -4,83 +4,58 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { Server } from 'socket.io';
 import { RoomStore } from './rooms.js';
-import type { JoinRequest } from './types.js';
-
-const app = express();
-const http = createServer(app);
-const allowedOrigins = process.env.PUBLIC_ORIGIN?.split(',').map(origin => origin.trim()).filter(Boolean);
-const io = new Server(http, { cors: { origin: allowedOrigins?.length ? allowedOrigins : true }, maxHttpBufferSize: 1_000_000 });
-const rooms = new RoomStore();
-const publicDir = resolve(process.cwd(), 'dist/public');
-
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: '200kb' }));
-app.get('/api/health', (_req, res) => res.json({ ok: true, rooms: rooms.rooms.size }));
-app.get('/api/rooms', (_req, res) => res.json([...rooms.rooms.values()].filter(r => r.public).map(r => ({ code: r.code, mode: r.mode, players: Object.keys(r.players).length, status: r.status }))));
-app.use(express.static(publicDir, { etag: true, maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0 }));
-app.get('*path', (_req, res) => res.sendFile(resolve(publicDir, 'index.html')));
-
-const emitRoom = (code: string) => {
-  const room = rooms.rooms.get(code);
-  if (room) io.to(code).emit('room:state', room);
-};
-
-io.on('connection', socket => {
-  socket.on('room:join', (raw: JoinRequest, ack?: (value: unknown) => void) => {
-    try {
-      if (!raw || !['dungeon', 'duel'].includes(raw.mode)) throw new Error('Invalid mode');
-      const room = rooms.join(socket.id, raw);
-      socket.join(room.code);
-      ack?.({ ok: true, code: room.code, playerId: socket.id });
-      emitRoom(room.code);
-    } catch (error) { ack?.({ ok: false, error: error instanceof Error ? error.message : 'Could not join' }); }
-  });
-  socket.on('room:start', (payload: { mapGrid?: number[][] } = {}, ack?: (value: unknown) => void) => {
-    try { const room = rooms.findByPlayer(socket.id); if (!room) throw new Error('Join a room first');
-      if (payload?.mapGrid) {
-        const grid = payload.mapGrid;
-        if (!Array.isArray(grid) || grid.length < 3 || grid.length > 160 || !grid.every(row => Array.isArray(row) && row.length >= 3 && row.length <= 160 && row.every(tile => Number.isInteger(tile) && tile >= 0 && tile <= 11))) throw new Error('Invalid dungeon map');
-        room.mapGrid = grid.map(row => row.slice());
-      }
-      rooms.start(room, socket.id); emitRoom(room.code); ack?.({ ok: true }); }
-    catch (error) { ack?.({ ok: false, error: error instanceof Error ? error.message : 'Could not start' }); }
-  });
-  socket.on('player:input', (input: { x?: number; y?: number; moveX?: number; moveY?: number }) => {
-    const room = rooms.findByPlayer(socket.id), player = room?.players[socket.id];
-    if (!room || !player || room.status !== 'playing') return;
-    const targetX = Number(input?.x), targetY = Number(input?.y);
-    const moveX = Number(input?.moveX), moveY = Number(input?.moveY);
-    if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) return;
-    const now = Date.now();
-    const dt = Math.min(0.12, Math.max(0, (now - (player.lastInputAt || now)) / 1000));
-    player.lastInputAt = now;
-    const grid = room.mapGrid;
-    const canMove = (px: number, py: number) => {
-      if (!grid?.length) return px >= 11 && py >= 11 && px <= 1920 - 11 && py <= 1360 - 11;
-      const tile = 40, radius = 11;
-      const wall = (wx: number, wy: number) => { const tx = Math.floor(wx / tile), ty = Math.floor(wy / tile); return tx < 0 || ty < 0 || ty >= grid.length || tx >= (grid[0]?.length || 0) || grid[ty]?.[tx] === 1; };
-      return !wall(px - radius, py - radius) && !wall(px + radius, py - radius) && !wall(px - radius, py + radius) && !wall(px + radius, py + radius);
-    };
-    const requestedX = targetX - player.x, requestedY = targetY - player.y;
-    const requestedDistance = Math.hypot(requestedX, requestedY);
-    const maxStep = Math.max(10, 560 * dt);
-    const scale = requestedDistance > maxStep ? maxStep / requestedDistance : 1;
-    const dx = requestedX * scale, dy = requestedY * scale;
-    if (canMove(player.x + dx, player.y)) player.x += dx;
-    if (canMove(player.x, player.y + dy)) player.y += dy;
-    void moveX; void moveY;
-    room.lastActiveAt = now;
-  });
-  socket.on('stage:advance', () => { const room = rooms.findByPlayer(socket.id); if (room?.hostId === socket.id) { rooms.advance(room); emitRoom(room.code); } });
-  socket.on('disconnect', () => { const room = rooms.leave(socket.id); if (room && rooms.rooms.has(room.code)) emitRoom(room.code); });
+import { action,receiveInput,stepRoom } from './simulation.js';
+import { validateMap,type GameMap } from './maps.js';
+import { PROTOCOL,TICK } from '../shared/movement.js';
+import type { JoinRequest,RoomState } from './types.js';
+const app=express(),http=createServer(app);
+const allowed=process.env.PUBLIC_ORIGIN?.split(',').map(s=>s.trim()).filter(Boolean);
+const io=new Server(http,{cors:{origin:allowed?.length?allowed:true},maxHttpBufferSize:200000});
+const rooms=new RoomStore(),maps=new Map<string,{map:GameMap;idleSince:number;owner:string}>();
+const build=process.env.RAILWAY_GIT_COMMIT_SHA||'local-v1.2.1';
+app.use(helmet({contentSecurityPolicy:false}));
+app.get('/api/health',(_q,r)=>r.json({ok:true,protocol:PROTOCOL,build,version:'1.2.1',rooms:rooms.rooms.size}));
+app.use(express.static(resolve('dist/public'),{maxAge:0}));
+app.get('/',(_q,r)=>r.sendFile(resolve('dist/public/index.html')));
+function snapshot(r:RoomState,includeMap=false){
+  const players=Object.fromEntries(Object.entries(r.players).map(([id,p])=>{const {queue,input,inputAt,lastReceived,...visible}=p;return [id,visible];}));
+  const w=r.world;
+  return {protocol:PROTOCOL,build,code:r.code,mode:r.mode,status:r.status,hostId:r.hostId,stage:r.stage,maxStages:r.maxStages,arenaIndex:r.arenaIndex,round:r.round,tick:r.tick,revision:r.revision,paused:r.paused,players,world:w?{...w,features:w.map.features,map:includeMap?w.map:undefined}:undefined};
+}
+function emit(r:RoomState,full=false){io.to(r.code).emit('room:state',snapshot(r,full));}
+type Ack=(v:unknown)=>void;
+const callback=(raw:unknown,ack?:Ack):Ack|undefined=>typeof raw==='function'?raw as Ack:typeof ack==='function'?ack:undefined;
+io.on('connection',socket=>{
+  socket.emit('server:hello',{protocol:PROTOCOL,build,version:'1.2.1'});
+  const fail=(ack:Ack|undefined,error:unknown)=>ack?.({ok:false,error:error instanceof Error?error.message:String(error)});
+  socket.on('room:join',(raw:JoinRequest,ack?:Ack)=>{try{
+    if(raw?.protocol!==PROTOCOL)throw Error('Game update required. Reload to use multiplayer v1.2.1.');
+    const r=rooms.join(socket.id,raw);socket.join(r.code);ack?.({ok:true,code:r.code,playerId:socket.id,room:snapshot(r,true)});emit(r,true);
+  }catch(e){fail(ack,e);}});
+  socket.on('room:start',(raw:{map?:unknown;mapId?:string},ack?:Ack)=>{try{
+    const r=rooms.findByPlayer(socket.id);if(!r||r.hostId!==socket.id)throw Error('Only the host can start');
+    if(raw?.map)r.customMap=validateMap(raw.map);
+    if(raw?.mapId){const published=maps.get(raw.mapId);if(!published)throw Error('Published map expired');r.customMap=structuredClone(published.map);r.mapId=raw.mapId;}
+    rooms.start(r,socket.id);emit(r,true);ack?.({ok:true});
+  }catch(e){fail(ack,e);}});
+  socket.on('player:input',(raw:unknown)=>{const r=rooms.findByPlayer(socket.id),p=r?.players[socket.id];if(r&&p)receiveInput(r,p,raw,Date.now());});
+  let lastAction=0;
+  socket.on('player:action',(raw:unknown,ack?:Ack)=>{const r=rooms.findByPlayer(socket.id),p=r?.players[socket.id];if(!r||!p)return fail(ack,'Join a run');const now=Date.now();if(now-lastAction<150)return fail(ack,'Please wait');lastAction=now;const error=action(r,p,raw);ack?.(error?{ok:false,error}:{ok:true});});
+  socket.on('room:sync',(raw:unknown,ack?:Ack)=>{const done=callback(raw,ack),r=rooms.findByPlayer(socket.id);if(r)done?.({ok:true,room:snapshot(r,true)});else done?.({ok:false,error:'Join a room first'});});
+  socket.on('room:leave',(raw:unknown,ack?:Ack)=>{const done=callback(raw,ack),r=rooms.leave(socket.id);if(r){socket.leave(r.code);if(rooms.rooms.has(r.code))emit(r);}done?.({ok:true});});
+  socket.on('latency',(_value:unknown,ack?:Ack)=>{ack?.({ok:true});});
+  const latencyTimer=setInterval(()=>{const start=performance.now();socket.timeout(2000).emit('latency:probe',(err:Error|null)=>{const r=rooms.findByPlayer(socket.id),p=r?.players[socket.id];if(!err&&p)p.latency=Math.min(300,performance.now()-start);});},2000);
+  socket.on('maps:list',(raw:unknown,ack?:Ack)=>callback(raw,ack)?.({ok:true,maps:[...maps].map(([id,m])=>({id,name:m.map.name,idleSince:m.idleSince}))}));
+  socket.on('maps:publish',(raw:unknown,ack?:Ack)=>{try{if(maps.size>=500)throw Error('Map pool full');const map=validateMap(raw),id=crypto.randomUUID();maps.set(id,{map,idleSince:Date.now(),owner:socket.id});ack?.({ok:true,id});}catch(e){fail(ack,e);}});
+  socket.on('disconnect',()=>{clearInterval(latencyTimer);const r=rooms.leave(socket.id);if(r&&rooms.rooms.has(r.code))emit(r);});
 });
-
-setInterval(() => {
-  rooms.cleanup();
-  for (const room of rooms.rooms.values()) if (room.status === 'playing') emitRoom(room.code);
-}, 50).unref();
-
-const port = Number(process.env.PORT || 8000), host = process.env.HOST || '127.0.0.1';
-http.listen(port, host, () => console.log(`One More Relic v1.1 at http://${host}:${port}`));
-
-export { http, io, rooms };
+let last=performance.now(),acc=0;
+const timer=setInterval(()=>{
+  const now=performance.now();acc=Math.min(.25,acc+(now-last)/1000);last=now;
+  while(acc>=TICK){acc-=TICK;for(const r of rooms.rooms.values()){const rev=r.revision;stepRoom(r);if(r.tick%2===0||r.revision!==rev)emit(r,r.revision!==rev);}}
+  const wall=Date.now();for(const [id,m]of maps){if([...rooms.rooms.values()].some(r=>r.mapId===id&&Object.keys(r.players).length))m.idleSince=wall;else if(wall-m.idleSince>=3600000)maps.delete(id);}
+},1000/30).unref();
+const port=Number(process.env.PORT||8000),host=process.env.HOST||'127.0.0.1';
+http.listen(port,host,()=>console.log('One More Relic 1.2.1 protocol '+PROTOCOL+' at http://'+host+':'+port+' build '+build));
+http.on('close',()=>clearInterval(timer));
+export {http,io,rooms,snapshot};

@@ -1,37 +1,37 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
-
-const endpoint = process.env.OMR_TEST_URL || 'http://127.0.0.1:8000';
-const connect = () => new Promise((resolve, reject) => {
-  const socket = io(endpoint, { transports: ['websocket'], forceNew: true, timeout: 3000 });
-  socket.once('connect', () => resolve(socket));
-  socket.once('connect_error', reject);
-});
-const emitAck = (socket, event, payload) => new Promise(resolve => payload === undefined ? socket.emit(event, resolve) : socket.emit(event, payload, resolve));
-const stateWhere = (socket, predicate) => new Promise((resolve, reject) => {
-  const timer = setTimeout(() => { socket.off('room:state', receive); reject(new Error('Timed out waiting for room state')); }, 4000);
-  const receive = state => { if (!predicate(state)) return; clearTimeout(timer); socket.off('room:state', receive); resolve(state); };
-  socket.on('room:state', receive);
-});
-
-const host = await connect(), guest = await connect();
-try {
-  const joinedHost = await emitAck(host, 'room:join', { mode: 'dungeon', name: 'Host', skin: 'moss' });
-  assert.equal(joinedHost.ok, true);
-  const both = stateWhere(host, room => Object.keys(room.players).length === 2);
-  const joinedGuest = await emitAck(guest, 'room:join', { mode: 'dungeon', name: 'Guest', code: joinedHost.code, skin: 'frost' });
-  assert.equal(joinedGuest.ok, true);
-  assert.equal((await both).code, joinedHost.code);
-  const playing = stateWhere(guest, room => room.status === 'playing');
-  const grid = Array.from({ length: 16 }, (_, y) => Array.from({ length: 20 }, (_, x) => x === 0 || y === 0 || x === 19 || y === 15 ? 1 : 0));
-  grid[5][3] = 2;
-  assert.equal((await emitAck(host, 'room:start', { mapGrid: grid })).ok, true);
-  const started = await playing;
-  const before = started.players[joinedHost.playerId].x;
-  const moved = stateWhere(guest, room => room.players[joinedHost.playerId].x > before);
-  host.emit('player:input', { x: before + 12, y: started.players[joinedHost.playerId].y, moveX: 1, moveY: 0 });
-  assert.ok((await moved).players[joinedHost.playerId].x > before);
-  console.log(`PASS: two clients joined ${joinedHost.code}, started together, and received synchronized movement`);
-} finally {
-  host.disconnect(); guest.disconnect();
-}
+const endpoint=process.env.OMR_TEST_URL||'http://127.0.0.1:8000';
+const sockets=[];
+const deadline=setTimeout(()=>{console.error('FAIL: multiplayer test exceeded 20 seconds');for(const s of sockets)s.disconnect();process.exit(1);},20000);
+const connect=()=>new Promise((resolve,reject)=>{const s=io(endpoint,{transports:['websocket'],forceNew:true,reconnection:false,timeout:4000});sockets.push(s);s.once('connect',()=>resolve(s));s.once('connect_error',reject);});
+const ack=(s,e,p={})=>new Promise((resolve,reject)=>s.timeout(4000).emit(e,p,(err,r)=>err?reject(Error(e+' timed out')):!r?.ok?reject(Error(r?.error||e+' failed')):resolve(r)));
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+try{
+ const health=await(await fetch(endpoint+'/api/health',{signal:AbortSignal.timeout(4000)})).json();
+ assert.equal(health.protocol,12,'Server must deploy protocol 12 before testing the new frontend');
+ const a=await connect(),b=await connect();
+ const ja=await ack(a,'room:join',{protocol:12,mode:'dungeon',name:'Test host'});
+ let sa,sb;a.on('room:state',r=>sa=r);b.on('room:state',r=>sb=r);
+ const grid=Array.from({length:16},(_,y)=>Array.from({length:20},(_,x)=>x===0||y===0||x===19||y===15?1:0));
+ grid[5][3]=2;grid[14][18]=3;grid[13][18]=7;grid[5][8]=1;grid[8][9]=4;
+ await ack(a,'room:start',{map:{name:'Network regression',grid,stageCount:2}});
+ await wait(100);
+ const jb=await ack(b,'room:join',{protocol:12,mode:'dungeon',name:'Late guest',code:ja.code});
+ assert.equal(jb.room.status,'playing','late join must enter the active custom room');
+ assert.equal(jb.room.world.map.name,'Network regression / Stage 1','late join must receive the active custom map stage');
+ assert.deepEqual(jb.room.world.map.grid,grid,'late join must receive the exact authored tile grid');
+ await wait(100);
+ const start=sa.players[a.id].x,revision=sa.revision;
+ for(let seq=1;seq<=75;seq++){a.emit('player:input',{seq,revision,x:1,y:0,aimX:600,aimY:220,fire:false,dash:false,light:false});await wait(34);}
+ await wait(150);
+ assert.ok(sa.players[a.id].x>start+140,'movement must exceed the former snap threshold');
+ assert.ok(sa.players[a.id].x<=309,'player must stop before the wall');
+ assert.equal(sa.players[a.id].x,sb.players[a.id].x,'both clients see same stopped position');
+ assert.equal(sa.players[a.id].lastSeq,75);
+ assert.deepEqual(sa.world.doors,sb.world.doors);
+ const paused=await new Promise(resolve=>a.emit('player:action',{type:'pause'},resolve));assert.equal(paused.ok,false);
+ const syncA=await ack(a,'room:sync'),syncB=await ack(b,'room:sync');
+ assert.equal(syncA.room.world.map.name,syncB.room.world.map.name);
+ assert.deepEqual(syncA.room.world.map.grid,syncB.room.world.map.grid);
+ console.log('PASS: late room-code join receives active custom map; two clients share authoritative movement, collision, and world state');
+}finally{clearTimeout(deadline);for(const s of sockets)s.disconnect();}
