@@ -1,4 +1,4 @@
-# One More Relic v1.1
+# One More Relic version 1.1
 
 A top-down dungeon crawler built around short multiplayer expeditions, player-made dungeons, escalating run upgrades, rare relic combinations, and a rolling duel playlist.
 
