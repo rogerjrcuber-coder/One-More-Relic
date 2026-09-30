@@ -362,7 +362,7 @@
   }
   function update(dt){
     if(!game||game.status!=='playing'||game.paused)return;game.time+=dt;const p=game.player;p.inv=Math.max(0,p.inv-dt);p.fireCD-=dt;p.dashCD=Math.max(0,p.dashCD-dt);if(game.upgrades.shield){p.shieldTimer-=dt;if(p.shieldTimer<=0){p.shield=Math.max(p.shield,18*game.upgrades.shield);p.shieldTimer=12;}}const m=movement();
-    if(game.networked){const target=game.netTarget||p;p.x+=(target.x-p.x)*Math.min(1,dt*20);p.y+=(target.y-p.y)*Math.min(1,dt*20);}else if(p.dash>0){p.dash-=dt;move(p,p.dashX*510*dt,p.dashY*510*dt);if(game.items.cinder)game.hazards.push({x:p.x,y:p.y,life:1+game.items.cinder,r:22});}else move(p,m.x*155*(p.perk==='swift'?1.15:1)*dt,m.y*155*(p.perk==='swift'?1.15:1)*dt);
+    if(p.dash>0){p.dash-=dt;move(p,p.dashX*510*dt,p.dashY*510*dt);if(game.items.cinder)game.hazards.push({x:p.x,y:p.y,life:1+game.items.cinder,r:22});}else move(p,m.x*155*(p.perk==='swift'?1.15:1)*dt,m.y*155*(p.perk==='swift'?1.15:1)*dt);if(game.networked&&game.netTarget&&distance(p,game.netTarget)>60){p.x=game.netTarget.x;p.y=game.netTarget.y;}
     updateLantern(dt);for(const key of game.stageKeys)if(!key.collected&&distance(key,p)<20){key.collected=true;game.keysOwned++;effect('burst',key.x,key.y,'#75bce0',.5,24);worldMessage('Dungeon key found. Press E near a locked door.',3);}updateExploration(dt);game.pathCD-=dt;if(game.pathCD<=0){game.pathCD=.35;rebuildPaths();}
     const auto=isTouch()&&game.enemies.some(e=>distance(p,e)<lightRadius()&&lineOfSight(p,e));if((pointer.down||auto)&&p.fireCD<=0)shoot();
     updateEnemies(dt);
