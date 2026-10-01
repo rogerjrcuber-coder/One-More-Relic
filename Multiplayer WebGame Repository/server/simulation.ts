@@ -1,24 +1,24 @@
 import { clamp,clear,distance,move,movementStep,sight,solid,TICK,type Input } from '../shared/movement.js';
 import { biomes,weapons,relics,upgrades } from './content.js';
-import { generateMap,random } from './maps.js';
+import { doorAt,generateMap,keyTypeAt,random } from './maps.js';
 import type { Enemy,PlayerState,Projectile,RoomState,World } from './types.js';
 const histories=new WeakMap<RoomState,{time:number;players:Record<string,{x:number;y:number}>}[]>();
 export function newPlayer(id:string,name:string,skin='moss',weapon='wand',perk='vigor'):PlayerState {
   const maxHp=perk==='vigor'?125:100;
-  return {id,name,skin,weapon:weapon in weapons?weapon as PlayerState['weapon']:'wand',perk:['vigor','swift','moss'].includes(perk)?perk:'vigor',x:0,y:0,r:11,hp:maxHp,maxHp,ready:false,connected:true,score:0,dash:0,dashCD:0,dashX:0,dashY:0,inv:0,fireCD:0,lantern:100,wideLight:false,heat:0,gold:0,keys:0,potions:1,items:{},upgrades:{},statuses:{},shield:0,shieldTimer:12,attacks:0,hits:0,lastSeq:0,latency:0,downed:false,revive:0,emote:'',emoteUntil:0,choices:[],input:null,inputAt:0,queue:[],lastReceived:0};
+  return {id,name,skin,weapon:weapon in weapons?weapon as PlayerState['weapon']:'wand',perk:['vigor','swift','moss'].includes(perk)?perk:'vigor',x:0,y:0,r:11,hp:maxHp,maxHp,ready:false,connected:true,score:0,dash:0,dashCD:0,dashX:0,dashY:0,inv:0,fireCD:0,lantern:100,wideLight:false,heat:0,gold:0,keys:0,keyring:{red:0,blue:0,green:0,purple:0,gold:0},potions:1,items:{},upgrades:{},statuses:{},shield:0,shieldTimer:12,attacks:0,hits:0,lastSeq:0,latency:0,downed:false,revive:0,emote:'',emoteUntil:0,choices:[],input:null,inputAt:0,queue:[],lastReceived:0};
 }
 export function spawnPlayer(room:RoomState,p:PlayerState,index:number):void {
   const w=room.world!,start=w.map.spawns[index%w.map.spawns.length]!;
   let pos=start;
   for(let r=0;r<8;r++){let found=false;for(let y=-r;y<=r&&!found;y++)for(let x=-r;x<=r;x++){const c={x:start.x+x*40,y:start.y+y*40};if(clear(w.map.grid,c.x,c.y,11,w.doors)){pos=c;found=true;break;}}if(found)break;}
   Object.assign(p,pos,{hp:p.maxHp,downed:false,inv:2,dash:0,dashCD:0,fireCD:0,input:null,queue:[],lastSeq:0,lastReceived:0,choices:[],heat:0,statuses:{}});
-  if(room.mode==='duel'){p.maxHp=p.hp=100;p.weapon='wand';p.perk='none';p.items={};p.upgrades={};p.gold=0;p.keys=0;p.potions=0;p.shield=0;}
+  if(room.mode==='duel'){p.maxHp=p.hp=100;p.weapon='wand';p.perk='none';p.items={};p.upgrades={};p.gold=0;p.keys=0;p.keyring={red:0,blue:0,green:0,purple:0,gold:0};p.potions=0;p.shield=0;}
 }
 function enemy(room:RoomState,x:number,y:number,boss=false,config:Record<string,unknown>={}):Enemy {
   const w=room.world!,n=w.nextId++,rng=random(room.seed+n+room.round*67),theme=biomes[w.map.biome],kind=Math.floor(rng()*4),party=Object.keys(room.players).length;
   const elite=!boss&&(rng()<Math.min(.5,.08+room.stage*.05+w.wave*.01)||w.map.event==='Elite hunt');
   const hp=clamp(Number(config.hp)||(boss?650:55+kind*10),10,3000)*(1+(room.stage-1)*.25+w.wave*.05)*(1+(party-1)*(boss?.35:.1))*(elite?1.5:1)*(boss&&w.map.event==='Empowered boss'?1.4:1);
-  return {id:n,x,y,r:boss?16:12,name:String(config.name||(boss?theme.boss:theme.enemies[kind])).slice(0,40),hp,maxHp:hp,damage:clamp(Number(config.damage)||(boss?20:10),1,80),speed:clamp(Number(config.speed)||(kind===3?0:55),0,150),boss,elite,behavior:String(config.behavior||(boss?'fan':['chaser','spitter','charger','sentry'][kind])),color:theme.color,cd:1,flash:0,target:null,alert:0,windup:0,chargeAngle:0,chargeTime:0,raging:false,statuses:{},dead:false,animation:'idle',dash:0,dashCD:0,dashX:0,dashY:0,perk:'none'};
+  return {id:n,x,y,r:boss?16:12,name:String(config.name||(boss?theme.boss:theme.enemies[kind])).slice(0,40),hp,maxHp:hp,damage:clamp(Number(config.damage)||(boss?20:10),1,80),speed:clamp(Number(config.speed)||(kind===3?0:55),0,150),boss,elite,behavior:String(config.behavior||(boss?'fan':['chaser','spitter','charger','sentry'][kind])),color:theme.color,cd:1,flash:0,target:null,alert:0,windup:0,chargeAngle:0,chargeTime:0,raging:false,statuses:{},dead:false,animation:'idle',dash:0,dashCD:0,dashX:0,dashY:0,perk:'none',requiredBoss:true,finalBoss:false};
 }
 export function loadWorld(room:RoomState):void {
   histories.set(room,[]);
@@ -34,19 +34,21 @@ export function loadWorld(room:RoomState):void {
       map.creatures=Object.fromEntries(Object.entries(map.creatures).map(([key,value])=>{const [x,y]=key.split(',').map(Number);return [(width/40-1-x!)+','+(height/40-1-y!),value];}));
     }
   }
-  room.world={map,enemies:[],bullets:[],pickups:[],chests:[],doors:[],torches:[],traps:[],time:0,roundTime:0,wave:room.mode==='waves'?(room.stage-1)*5+1:0,kills:0,chestsOpened:0,bossDead:room.mode!=='dungeon',message:map.event,transition:0,winner:null,nextId:1,spawnTimer:5,pings:[]};
+  room.world={map,enemies:[],bullets:[],pickups:[],chests:[],doors:[],torches:[],traps:[],time:0,roundTime:0,wave:room.mode==='waves'?(room.stage-1)*5+1:0,kills:0,chestsOpened:0,bossDead:room.mode!=='dungeon',bossesRemaining:0,message:map.event,transition:0,winner:null,nextId:1,spawnTimer:5,pings:[]};
   const w=room.world;
   for(let y=0;y<map.grid.length;y++)for(let x=0;x<map.grid[0]!.length;x++) {
     const t=map.grid[y]![x],p={x:x*40+20,y:y*40+20};
     if((t===4||t===7)&&room.mode==='dungeon'){
-      w.enemies.push(enemy(room,p.x,p.y,t===7,map.creatures[x+','+y]|| (t===7?{behavior:map.biome==='forge'?'charger':map.biome==='crystal'?'ring':'fan'}:{})));
+      const e=enemy(room,p.x,p.y,t===7,map.creatures[x+','+y]|| (t===7?{behavior:map.biome==='forge'?'charger':map.biome==='crystal'?'ring':'fan'}:{}));
+      if(t===7){const boss=map.bosses?.[x+','+y];e.requiredBoss=boss?.required!==false;e.finalBoss=boss?.final===true;w.bossesRemaining+=e.requiredBoss?1:0;}w.enemies.push(e);
       if(t===4&&!room.customMap){const count=Math.floor(random(room.seed+x+y+room.stage)()*3);for(let i=0;i<count;i++){const pos={x:p.x+(i?40:-40),y:p.y+40};if(clear(map.grid,pos.x,pos.y,12))w.enemies.push(enemy(room,pos.x,pos.y));}}
     }
     if(t===5||t===11)w.chests.push({...p,id:w.nextId++,opened:false,kind:t===11?'vault':'upgrade'});
-    if(t===9)w.pickups.push({...p,id:w.nextId++,kind:'key',value:1});
-    if(t===10)w.doors.push({...p,id:w.nextId++,open:false});
+    if(t===9)w.pickups.push({...p,id:w.nextId++,kind:'key',value:1,keyType:keyTypeAt(map,x,y),magnetSpeed:0});
+    if(t===10){const door=doorAt(map,x,y);w.doors.push({...p,id:w.nextId++,open:false,keyType:door.type,name:door.name});}
     if(t===8)w.torches.push(p);if(t===6)w.traps.push(p);
   }
+  if(room.mode==='dungeon')w.bossDead=w.bossesRemaining===0;
   Object.values(room.players).forEach((p,i)=>spawnPlayer(room,p,i));
   if(room.mode==='waves')spawnWave(room);
 }
@@ -81,6 +83,7 @@ function shoot(room:RoomState,p:PlayerState,input:Input):void {
 }
 function statuses(e:PlayerState|Enemy,dt:number):void {for(const key of Object.keys(e.statuses)){e.statuses[key]=Math.max(0,e.statuses[key]!-dt);if(e.statuses[key]!>0&&['poison','burn'].includes(key))hurt(e,4*dt);if(e.statuses[key]===0)delete e.statuses[key];}}
 function reward(p:PlayerState,id:string,kind:'items'|'upgrades'):void {p[kind][id]=(p[kind][id]||0)+1;if(id==='shield')p.shield+=18;}
+function keyTotal(p:PlayerState):void {p.keys=Object.values(p.keyring).reduce((n,v)=>n+v,0);}
 export function action(room:RoomState,p:PlayerState,raw:unknown):string {
   if(!room.world||room.status!=='playing'||!raw||typeof raw!=='object')return 'No active run';
   const a=raw as Record<string,unknown>,w=room.world;
@@ -90,18 +93,24 @@ export function action(room:RoomState,p:PlayerState,raw:unknown):string {
   if(a.type==='ping'){const x=Number(a.x),y=Number(a.y);if(!Number.isFinite(x)||!Number.isFinite(y)||distance(p,{x,y})>600)return 'Ping nearby';w.pings=w.pings.filter(q=>q.owner!==p.id);w.pings.push({id:p.id,owner:p.id,x,y,kind:String(a.kind||'Location').slice(0,20),expires:w.time+5});return '';}
   if(a.type==='trade'){const target=room.players[String(a.target)],kind=String(a.kind),n=Number(a.amount);if(!target||target===p||target.downed||distance(p,target)>100||room.mode==='duel'||!['gold','keys','potions'].includes(kind)||!Number.isSafeInteger(n)||n<1)return 'Invalid transfer';const k=kind as 'gold'|'keys'|'potions';if(p[k]<n)return 'Not enough to give';p[k]-=n;target[k]+=n;return '';}
   if(a.type==='potion'){if(p.potions<=0)return 'No potions';p.potions--;p.hp=Math.min(p.maxHp,p.hp+45);return '';}
+  if(a.type==='merchant'){
+    const f=w.map.features.find(q=>q.kind==='merchant'&&distance(p,q)<70);if(!f)return 'Move near a merchant';
+    const item=String(a.item||'health'),offers={health:{cost:f.value||8,heal:45},shield:{cost:(f.value||8)+3,shield:30},speed:{cost:(f.value||8)+2,speed:1}} as const,offer=offers[item as keyof typeof offers]||offers.health;
+    if(p.gold<offer.cost)return item+' tonic costs '+offer.cost+' gold';p.gold-=offer.cost;
+    if('heal'in offer)p.hp=Math.min(p.maxHp,p.hp+offer.heal);if('shield'in offer)p.shield+=offer.shield;if('speed'in offer)p.statuses.swift=45;return 'Purchased '+item+' tonic';
+  }
   if(a.type==='relic'){const id=String(a.id);if(!p.choices.includes(id))return 'Choose an offered relic';reward(p,id,'items');p.choices=[];return '';}
   if(a.type==='interact'){
     const ally=Object.values(room.players).find(t=>t.downed&&distance(p,t)<55);
     if(ally&&room.mode!=='duel'){ally.revive++;if(ally.revive>=3){ally.downed=false;ally.hp=Math.ceil(ally.maxHp*.4);ally.inv=2;ally.revive=0;}return ally.downed?'Reviving: interact three times':'';}
-    const door=w.doors.find(d=>!d.open&&distance(p,d)<58);if(door){if(p.keys<1)return 'Find a key';p.keys--;door.open=true;return '';}
+    const door=w.doors.find(d=>!d.open&&distance(p,d)<58);if(door){if((p.keyring[door.keyType]||0)<1)return 'Need a '+door.keyType+' key for '+door.name;p.keyring[door.keyType]--;keyTotal(p);door.open=true;return '';}
     const chest=w.chests.find(c=>!c.opened&&distance(p,c)<62&&sight(w.map.grid,p,c,w.doors));
-    if(chest){if(w.map.features.some(f=>f.kind==='secret'&&f.active&&distance(chest,f)<25))return 'Find the hidden vault switch';if(p.choices.length)return 'Choose your pending relic';const price=(w.map.chestPricing.baseCost+w.map.chestPricing.increase*w.chestsOpened)*(chest.kind==='vault'?3:1);if(chest.kind==='vault'&&p.keys>0)p.keys--;else{if(p.gold<price)return 'Need '+price+' gold';p.gold-=price;}chest.opened=true;w.chestsOpened++;if(chest.kind==='vault'){const start=(w.nextId+++room.seed)%relics.length;p.choices=[0,1,2].map(i=>relics[(start+i)%relics.length]!);}else reward(p,upgrades[(w.nextId++)%upgrades.length]!,'upgrades');return '';}
+    if(chest){if(w.map.features.some(f=>f.kind==='secret'&&f.active&&distance(chest,f)<25))return 'Find the hidden vault switch';if(p.choices.length)return 'Choose your pending relic';const price=(w.map.chestPricing.baseCost+w.map.chestPricing.increase*w.chestsOpened)*(chest.kind==='vault'?3:1);if(p.gold<price)return 'Need '+price+' gold';p.gold-=price;chest.opened=true;w.chestsOpened++;if(chest.kind==='vault'){const start=(w.nextId+++room.seed)%relics.length;p.choices=[0,1,2].map(i=>relics[(start+i)%relics.length]!);}else reward(p,upgrades[(w.nextId++)%upgrades.length]!,'upgrades');return '';}
     const f=w.map.features.find(f=>['merchant','lift','switch','submerged-vault'].includes(f.kind)&&distance(p,f)<60);
-    if(f?.kind==='merchant'){const cost=f.value||8;if(p.gold<cost)return 'Potion costs '+cost+' gold';p.gold-=cost;p.potions++;return '';}
+    if(f?.kind==='merchant')return 'Merchant nearby: choose a tonic from the party panel';
     if(f?.kind==='lift'&&f.target&&clear(w.map.grid,f.target.x,f.target.y,11,w.doors)){Object.assign(p,f.target);p.queue=[];return '';}
     if(f?.kind==='switch'){for(const s of w.map.features)if(s.kind==='secret')s.active=false;w.message='A hidden vault is revealed';return '';}
-    if(f?.kind==='submerged-vault'&&f.active){if(p.keys<1)return 'The submerged vault needs a key';p.keys--;f.active=false;reward(p,'moss','items');return '';}
+    if(f?.kind==='submerged-vault'&&f.active){const cost=12;if(p.gold<cost)return 'The submerged vault needs '+cost+' gold';p.gold-=cost;f.active=false;reward(p,'moss','items');return '';}
     return 'Move near a chest, door, teammate, merchant or lift';
   }
   return 'Unknown action';
@@ -134,7 +143,11 @@ export function stepRoom(room:RoomState,now=Date.now(),dt=TICK):void {
     if(p.dash>0&&p.items.cinder)for(const e of w.enemies)if(distance(p,e)<35)e.statuses.burn=2+p.items.cinder;
     p.heat=Math.max(0,p.heat-dt*3);if(p.heat>70)p.statuses.burn=2;
     for(const t of w.traps)if(distance(t,p)<20&&Math.sin(w.time*2.2)>.25)hurt(p,10);
-    for(const item of w.pickups)if(item.value>0&&distance(item,p)<22){if(item.kind==='gold'){p.gold+=item.value;p.hp=Math.min(p.maxHp,p.hp+3*(p.items.moss||0)+(p.perk==='moss'?2:0));}if(item.kind==='key')p.keys+=item.value;if(item.kind==='potion')p.potions+=item.value;if(item.kind==='upgrade')reward(p,item.upgrade||'rapid','upgrades');item.value=0;}
+    for(const item of w.pickups)if(item.value>0&&distance(item,p)<22){if(item.kind==='gold'){p.gold+=item.value;p.hp=Math.min(p.maxHp,p.hp+3*(p.items.moss||0)+(p.perk==='moss'?2:0));}if(item.kind==='key'){const type=item.keyType||'blue';p.keyring[type]+=item.value;keyTotal(p);}if(item.kind==='potion')p.potions+=item.value;if(item.kind==='upgrade')reward(p,item.upgrade||'rapid','upgrades');item.value=0;}
+  }
+  for(const item of w.pickups)if(item.value>0&&(item.kind==='gold'||item.kind==='key')){
+    const target=alive.reduce<PlayerState|null>((best,p)=>!best||distance(item,p)<distance(item,best)?p:best,null),radius=item.kind==='key'?150:120;
+    if(target&&distance(item,target)<radius){item.magnetSpeed=Math.min(item.kind==='key'?440:350,(item.magnetSpeed||0)+900*dt);const d=Math.max(1,distance(item,target));item.x+=(target.x-item.x)/d*item.magnetSpeed*dt;item.y+=(target.y-item.y)/d*item.magnetSpeed*dt;}
   }
   w.pickups=w.pickups.filter(p=>p.value>0);
   for(const e of w.enemies){if(e.dead)continue;statuses(e,dt);e.cd-=dt;e.flash=Math.max(0,e.flash-dt);const target=alive.reduce<PlayerState|null>((best,p)=>!best||distance(e,p)<distance(e,best)?p:best,null);e.target=target?.id||null;if(!target)continue;
@@ -144,7 +157,7 @@ export function stepRoom(room:RoomState,now=Date.now(),dt=TICK):void {
     else if(e.alert&&d>24){let a=Math.atan2(target.y-e.y,target.x-e.x);if(!visible){const options=[a,a+Math.PI/2,a-Math.PI/2];a=options.find(v=>clear(w.map.grid,e.x+Math.cos(v)*25,e.y+Math.sin(v)*25,e.r,w.doors))??a;}const speed=e.speed*(e.raging?1.3:1)*(e.statuses.ice?.5:1)*(e.behavior==='spitter'&&d<150?-1:1);move(e,Math.cos(a)*speed*dt,Math.sin(a)*speed*dt,w.map.grid,w.doors);}
     if(e.cd<=0&&visible&&d<440){e.cd=e.raging?1.2:2.4;const a=Math.atan2(target.y-e.y,target.x-e.x);if(e.behavior==='charger'){e.windup=.65;e.chargeAngle=a;}else if(e.behavior!=='chaser'){const count=e.boss?7:3;for(let i=0;i<count;i++)bullet(w,'enemy:'+e.id,e.x,e.y,e.behavior==='ring'?a+i*Math.PI*2/count:a+(i-(count-1)/2)*.18,170,e.damage,e.color,{hostile:true});}if(e.boss&&players.length>=4&&w.enemies.length<80){const pos={x:e.x+40,y:e.y};if(clear(w.map.grid,pos.x,pos.y,12,w.doors))w.enemies.push(enemy(room,pos.x,pos.y));}}
     for(const p of alive)if(distance(e,p)<e.r+p.r+2)hurt(p,e.damage);
-    if(e.hp<=0){e.dead=true;e.animation='dead';w.kills++;if(e.boss){w.bossDead=true;for(const p of players)reward(p,{moss:'crown',crystal:'storm',sunken:'moss',forge:'cinder',gardens:'beetle'}[w.map.biome],'items');}
+    if(e.hp<=0){e.dead=true;e.animation='dead';w.kills++;if(e.boss){if(e.requiredBoss)w.bossesRemaining=Math.max(0,w.bossesRemaining-1);for(const p of players)reward(p,{moss:'crown',crystal:'storm',sunken:'moss',forge:'cinder',gardens:'beetle'}[w.map.biome],'items');}
       for(const p of players)for(let i=0;i<Math.min(4,p.items.beetle||0);i++){const target=w.enemies.find(t=>t.hp>0&&t!==e);if(target)bullet(w,p.id,e.x,e.y,Math.atan2(target.y-e.y,target.x-e.x),300,18,'#b4e9c7');}
       w.pickups.push({id:w.nextId++,x:e.x,y:e.y,kind:'gold',value:e.boss?20:4});if(e.id%7===0)w.pickups.push({id:w.nextId++,x:e.x+10,y:e.y,kind:'potion',value:1});}
   }
@@ -159,7 +172,7 @@ export function stepRoom(room:RoomState,now=Date.now(),dt=TICK):void {
       if(--b.pierce<=0){b.life=0;break;}
     }
   }}
-  w.bullets=w.bullets.filter(b=>b.life>0);w.enemies=w.enemies.filter(e=>!e.dead);
+  w.bullets=w.bullets.filter(b=>b.life>0);w.enemies=w.enemies.filter(e=>!e.dead);if(room.mode==='dungeon')w.bossDead=w.bossesRemaining===0;
   const history=histories.get(room)||[];history.push({time:w.time,players:Object.fromEntries(players.map(p=>[p.id,{x:p.x,y:p.y}]))});while(history.length>8)history.shift();histories.set(room,history);
   if(room.mode==='duel'){
     w.spawnTimer-=dt;if(w.spawnTimer<=0){w.spawnTimer=8;const spot=w.map.spawns[w.nextId%w.map.spawns.length]!;w.pickups.push({id:w.nextId++,x:spot.x,y:spot.y,kind:'upgrade',value:1,upgrade:upgrades[w.nextId%upgrades.length]});}

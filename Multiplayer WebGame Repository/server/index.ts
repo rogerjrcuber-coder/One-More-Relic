@@ -12,9 +12,9 @@ const app=express(),http=createServer(app);
 const allowed=process.env.PUBLIC_ORIGIN?.split(',').map(s=>s.trim()).filter(Boolean);
 const io=new Server(http,{cors:{origin:allowed?.length?allowed:true},maxHttpBufferSize:200000});
 const rooms=new RoomStore(),maps=new Map<string,{map:GameMap;idleSince:number;owner:string}>();
-const build=process.env.RAILWAY_GIT_COMMIT_SHA||'local-v1.2.4';
+const build=process.env.RAILWAY_GIT_COMMIT_SHA||'local-v1.2.5';
 app.use(helmet({contentSecurityPolicy:false}));
-app.get('/api/health',(_q,r)=>r.json({ok:true,protocol:PROTOCOL,build,version:'1.2.4',rooms:rooms.rooms.size}));
+app.get('/api/health',(_q,r)=>r.json({ok:true,protocol:PROTOCOL,build,version:'1.2.5',rooms:rooms.rooms.size}));
 app.use(express.static(resolve('dist/public'),{maxAge:0}));
 app.get('/',(_q,r)=>r.sendFile(resolve('dist/public/index.html')));
 function snapshot(r:RoomState,includeMap=false){
@@ -26,10 +26,10 @@ function emit(r:RoomState,full=false){io.to(r.code).emit('room:state',snapshot(r
 type Ack=(v:unknown)=>void;
 const callback=(raw:unknown,ack?:Ack):Ack|undefined=>typeof raw==='function'?raw as Ack:typeof ack==='function'?ack:undefined;
 io.on('connection',socket=>{
-  socket.emit('server:hello',{protocol:PROTOCOL,build,version:'1.2.4'});
+  socket.emit('server:hello',{protocol:PROTOCOL,build,version:'1.2.5'});
   const fail=(ack:Ack|undefined,error:unknown)=>ack?.({ok:false,error:error instanceof Error?error.message:String(error)});
   socket.on('room:join',(raw:JoinRequest,ack?:Ack)=>{try{
-    if(raw?.protocol!==PROTOCOL)throw Error('Game update required. Reload to use multiplayer v1.2.4.');
+    if(raw?.protocol!==PROTOCOL)throw Error('Game update required. Reload to use multiplayer v1.2.5.');
     const r=rooms.join(socket.id,raw);socket.join(r.code);ack?.({ok:true,code:r.code,playerId:socket.id,room:snapshot(r,true)});emit(r,true);
   }catch(e){fail(ack,e);}});
   socket.on('room:start',(raw:{map?:unknown;mapId?:string},ack?:Ack)=>{try{
@@ -56,6 +56,6 @@ const timer=setInterval(()=>{
   const wall=Date.now();for(const [id,m]of maps){if([...rooms.rooms.values()].some(r=>r.mapId===id&&Object.keys(r.players).length))m.idleSince=wall;else if(wall-m.idleSince>=3600000)maps.delete(id);}
 },1000/30).unref();
 const port=Number(process.env.PORT||8000),host=process.env.HOST||'127.0.0.1';
-http.listen(port,host,()=>console.log('One More Relic 1.2.4 protocol '+PROTOCOL+' at http://'+host+':'+port+' build '+build));
+http.listen(port,host,()=>console.log('One More Relic 1.2.5 protocol '+PROTOCOL+' at http://'+host+':'+port+' build '+build));
 http.on('close',()=>clearInterval(timer));
 export {http,io,rooms,snapshot};

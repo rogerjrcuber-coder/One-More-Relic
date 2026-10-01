@@ -3,25 +3,26 @@ import type { GameMap } from './maps.js';
 import type { Biome } from './content.js';
 export type Mode='dungeon'|'waves'|'duel';
 export type RoomStatus='lobby'|'playing'|'results';
+export type KeyType='red'|'blue'|'green'|'purple'|'gold';
 export interface PlayerState extends Motion {
   id:string;name:string;skin:string;ready:boolean;hp:number;maxHp:number;score:number;connected:boolean;
   weapon:'wand'|'repeater'|'scatter';inv:number;fireCD:number;lantern:number;wideLight:boolean;heat:number;
-  gold:number;keys:number;potions:number;items:Record<string,number>;upgrades:Record<string,number>;
+  gold:number;keys:number;keyring:Record<KeyType,number>;potions:number;items:Record<string,number>;upgrades:Record<string,number>;
   statuses:Record<string,number>;shield:number;shieldTimer:number;attacks:number;hits:number;
   lastSeq:number;latency:number;downed:boolean;revive:number;emote:string;emoteUntil:number;
   choices:string[];input:Input|null;inputAt:number;queue:Input[];lastReceived:number;
 }
 export interface Enemy extends Motion {
   id:number;name:string;hp:number;maxHp:number;damage:number;speed:number;boss:boolean;elite:boolean;
-  behavior:string;color:string;cd:number;flash:number;target:string|null;alert:number;windup:number;
+  behavior:string;color:string;cd:number;flash:number;target:string|null;alert:number;windup:number;requiredBoss:boolean;finalBoss:boolean;
   chargeAngle:number;chargeTime:number;raging:boolean;statuses:Record<string,number>;dead:boolean;animation:string;
 }
 export interface Projectile extends Point {id:number;owner:string;vx:number;vy:number;damage:number;color:string;life:number;r:number;pierce:number;hit:string[];hostile:boolean;fire:number;poison:number;ice:number;chain:number;bounces:number;}
-export interface Pickup extends Point {id:number;kind:'gold'|'key'|'potion'|'upgrade';value:number;upgrade?:string;}
+export interface Pickup extends Point {id:number;kind:'gold'|'key'|'potion'|'upgrade';value:number;upgrade?:string;keyType?:KeyType;magnetSpeed?:number;}
 export interface Chest extends Point {id:number;kind:'upgrade'|'vault';opened:boolean;}
 export interface World {
-  map:GameMap;enemies:Enemy[];bullets:Projectile[];pickups:Pickup[];chests:Chest[];doors:(Point&{id:number;open:boolean})[];
-  torches:Point[];traps:Point[];time:number;roundTime:number;wave:number;kills:number;chestsOpened:number;bossDead:boolean;
+  map:GameMap;enemies:Enemy[];bullets:Projectile[];pickups:Pickup[];chests:Chest[];doors:(Point&{id:number;open:boolean;keyType:KeyType;name:string})[];
+  torches:Point[];traps:Point[];time:number;roundTime:number;wave:number;kills:number;chestsOpened:number;bossDead:boolean;bossesRemaining:number;
   message:string;transition:number;winner:string|null;nextId:number;spawnTimer:number;
   pings:(Point&{id:string;owner:string;kind:string;expires:number})[];
 }

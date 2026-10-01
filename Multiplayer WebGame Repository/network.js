@@ -17,7 +17,7 @@ async function connect(){
   socket?.disconnect();socket=window.io(endpoint,{reconnection:false,timeout:5000});
   socket.on('room:state',receive);
   socket.on('latency:probe',ack=>ack());
-  socket.on('server:hello',h=>{if(h.protocol!==PROTOCOL){error('Server update required: deploy v1.2.4 before playing.');socket.disconnect();}});
+  socket.on('server:hello',h=>{if(h.protocol!==PROTOCOL){error('Server update required: deploy v1.2.5 before playing.');socket.disconnect();}});
   socket.on('disconnect',()=>{if(active){keys.clear();mouse.down=false;pending=[];active=false;error('Connection lost. Rejoin your party from Play.');}});
   await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('connect_error',()=>reject(Error('Cannot reach the game server.')));});
 }
@@ -77,11 +77,12 @@ function input(){
 async function act(type,extra={}){try{await rpc('player:action',{type,...extra});}catch(e){error(e.message);}}
 function hud(){
   if(!room?.world||!predicted)return;const p=room.players[selfId],w=room.world;
-  $('arenaName').textContent=map.name;$('phase').textContent=room.mode==='waves'?'WAVE '+w.wave:room.mode==='duel'?'ROUND '+room.round:'STAGE '+room.stage;
+  $('arenaName').textContent=map.name;$('phase').textContent=room.mode==='waves'?'WAVE '+w.wave:room.mode==='duel'?'ROUND '+room.round:'STAGE '+room.stage+' / BOSSES '+w.bossesRemaining;
   $('healthText').textContent=Math.ceil(p.hp)+' / '+p.maxHp+(p.downed?' / DOWNED':'');$('healthBar').style.width=p.hp/p.maxHp*100+'%';
   $('gold').textContent=p.gold;$('kills').textContent=w.kills;$('stageText').textContent=room.mode==='waves'?'Wave '+w.wave:room.mode==='duel'?'Round '+room.round:room.stage+' / '+room.maxStages;
   $('runClock').textContent=Math.floor(w.time/60)+':'+String(Math.floor(w.time%60)).padStart(2,'0');
-  $('lanternText').textContent=Math.floor(p.lantern)+'% light / '+p.keys+' keys / '+p.potions+' potions';$('lanternBar').style.width=p.lantern+'%';
+  const keyText=Object.entries(p.keyring||{}).filter(([,n])=>n).map(([type,n])=>type[0].toUpperCase()+type.slice(1)+' '+n).join(', ')||'no keys';
+  $('lanternText').textContent=Math.floor(p.lantern)+'% light / '+keyText+' / '+p.potions+' potions';$('lanternBar').style.width=p.lantern+'%';
   $('chestCost').textContent=(map.chestPricing.baseCost+map.chestPricing.increase*w.chestsOpened)+' gold';
   $('chestCostNote').textContent='+'+map.chestPricing.increase+' after each opening';
   $('worldMessage').textContent=w.message;$('worldMessage').classList.toggle('hidden',!w.message);
@@ -90,9 +91,11 @@ function hud(){
     if(p.choices.length){text(inv,'p','Choose a relic:');for(const id of p.choices)button(inv,id,()=>act('relic',{id}));}}
   $('relicCount').textContent=Object.values(p.items).reduce((a,b)=>a+b,0);
   let party=$('partyPanel');if(!party){party=document.createElement('div');party.id='partyPanel';$('synergy').before(party);}
-  const nextPartySignature=JSON.stringify([Math.round(latency/25),Object.values(room.players).map(peer=>[peer.id,peer.name,Math.ceil(peer.hp),peer.score,peer.downed,Object.keys(peer.statuses)])]);
+  const nextPartySignature=JSON.stringify([Math.round(latency/25),w.bossesRemaining,Object.values(room.players).map(peer=>[peer.id,peer.name,Math.ceil(peer.hp),peer.score,peer.downed,Object.keys(peer.statuses)])]);
   if(nextPartySignature!==partySignature){partySignature=nextPartySignature;party.replaceChildren();text(party,'h3','Party / '+Math.round(latency)+' ms');
     for(const peer of Object.values(room.players)){button(party,peer.name+' / '+Math.ceil(peer.hp)+' HP / '+peer.score+' points'+(peer.downed?' / DOWNED':''),()=>inspect(peer.id));if(Object.keys(peer.statuses).length)text(party,'small',Object.keys(peer.statuses).join(', '));}
+    if(room.mode==='dungeon')text(party,'small',w.bossesRemaining?'Objectives: '+w.bossesRemaining+' required boss'+(w.bossesRemaining===1?'':'es')+' remaining':'Objectives complete — exit unlocked');
+    const merchant=map.features?.find(f=>f.kind==='merchant'&&Math.hypot(f.x-predicted.x,f.y-predicted.y)<90);if(merchant){text(party,'small','Merchant: spend gold on a temporary tonic');button(party,'Health tonic / '+(merchant.value||8)+' gold',()=>act('merchant',{item:'health'}));button(party,'Shield tonic / '+((merchant.value||8)+3)+' gold',()=>act('merchant',{item:'shield'}));button(party,'Speed tonic / '+((merchant.value||8)+2)+' gold',()=>act('merchant',{item:'speed'}));}
     button(party,'Ping location (Q)',()=>act('ping',{x:predicted.x,y:predicted.y}));button(party,'Drink potion (H)',()=>act('potion'));button(party,'Emotes',()=>{const b=show('Say it without words');for(const value of ['Wave','Laugh','Point','Dance','Thumbs up'])button(b,value,()=>{act('emote',{value});$('frontModal').close();});});}
 }
 function inspect(id){const p=room.players[id],b=show(p.name+' / build');text(b,'p',p.weapon+' / '+p.perk);text(b,'p',JSON.stringify({relics:p.items,upgrades:p.upgrades}));if(id!==selfId&&room.mode!=='duel')for(const kind of ['gold','keys','potions'])button(b,'Give 1 '+kind,()=>act('trade',{target:id,kind,amount:1}));}
@@ -106,6 +109,9 @@ const graphicsQuality=()=>window.OMRV11?.meta.settings.graphicsQuality||'high';
 function circle(x,y,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();}
 function rounded(x,y,w,h,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
 function diamond(x,y,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x,y-r);ctx.lineTo(x+r*.72,y);ctx.lineTo(x,y+r);ctx.lineTo(x-r*.72,y);ctx.closePath();ctx.fill();}
+const keyColors={red:'#e56e64',blue:'#77c7ee',green:'#83c977',purple:'#bd91e7',gold:'#e7bf58'};
+function drawKey(p,time,low){const color=keyColors[p.keyType]||keyColors.blue,yy=p.y+Math.sin(time*4+p.id)*2;ctx.save();if(!low){ctx.shadowBlur=14;ctx.shadowColor=color;}ctx.translate(p.x,yy);ctx.rotate(Math.PI/4);rounded(-3,-13,6,20,2,color);circle(0,-13,7,color);ctx.fillStyle='#192620';ctx.beginPath();ctx.arc(0,-13,2.5,0,Math.PI*2);ctx.fill();rounded(-3,5,12,4,1,color);ctx.restore();}
+function drawDecoration(d,time,low){const color={bush:'#547c4e',flowers:'#d998bc',roots:'#738d50',mushroom:'#c8898b',crystal:'#8fdaf0',rocks:'#6e817a',bones:'#d9ca9d',coral:'#79b9b1',embers:'#e47d52',debris:'#877262',statue:'#809086'}[d.kind]||'#6d8759';if(low){circle(d.x,d.y,4,color);return;}ctx.save();ctx.globalAlpha=.7;if(d.kind==='roots'){ctx.strokeStyle=color;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(d.x-8,d.y+7);ctx.quadraticCurveTo(d.x,d.y-10,d.x+9,d.y+7);ctx.stroke();}else if(d.kind==='crystal'){diamond(d.x,d.y-4,8,color);diamond(d.x+7,d.y+4,4,color);}else if(d.kind==='mushroom'){rounded(d.x-2,d.y-1,4,9,2,'#d8c2af');circle(d.x,d.y-3,6,color);}else{circle(d.x,d.y,7,color);circle(d.x+6,d.y+3,4,color);}ctx.restore();}
 function label(x,y,value,color='#eff7e5',size=10){ctx.fillStyle=color;ctx.font='600 '+size+'px sans-serif';ctx.textAlign='center';ctx.fillText(value,x,y);}
 function drawTile(x,y,tile,floor,wall,accent,time,low){
   const px=x*40,py=y*40,hash=(x*31+y*73)%19;
@@ -178,11 +184,11 @@ function draw(now){
   const [floor,wall,accent]=palette[map.biome]||palette.moss,time=room.world.time;
   const y0=Math.max(0,Math.floor(view.y/40)-1),y1=Math.min(map.grid.length,Math.ceil((view.y+vh)/40)+1),x0=Math.max(0,Math.floor(view.x/40)-1),x1=Math.min(map.grid[0].length,Math.ceil((view.x+vw)/40)+1);
   for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)drawTile(x,y,map.grid[y][x],floor,wall,accent,time,low);
-  const w=room.world;for(const f of map.features)featureArt(f,accent,time,low);
+  const w=room.world;for(const d of map.decorations||[])if(d.x>=view.x-30&&d.x<=view.x+vw+30&&d.y>=view.y-30&&d.y<=view.y+vh+30)drawDecoration(d,time,low);for(const f of map.features)featureArt(f,accent,time,low);
   for(const t of w.torches){if(!low){ctx.save();ctx.shadowBlur=20;ctx.shadowColor='#ffb45d';diamond(t.x,t.y-8,9+Math.sin(time*7+t.x)*1.5,'#edb767');diamond(t.x,t.y-6,5,'#ffe3a3');ctx.restore();rounded(t.x-6,t.y,12,15,3,'#65523a');}else circle(t.x,t.y,7,'#ffd293');}
-  for(const d of w.doors)if(!d.open){rounded(d.x-16,d.y-19,32,38,4,'#42677d');if(!low){ctx.strokeStyle='#79a9bd';ctx.strokeRect(d.x-12,d.y-15,24,30);circle(d.x+7,d.y+1,2,'#e3c979');}}
+  for(const d of w.doors)if(!d.open){const color=keyColors[d.keyType]||keyColors.blue;rounded(d.x-16,d.y-19,32,38,4,color+'aa');if(!low){ctx.strokeStyle=color;ctx.lineWidth=2;ctx.strokeRect(d.x-12,d.y-15,24,30);circle(d.x+7,d.y+1,3,'#fff1b4');label(d.x,d.y-27,d.keyType.toUpperCase()+' LOCK',color,8);}}
   for(const c of w.chests){circle(c.x,c.y+9,16,'#03080599');ctx.save();if(!low&&!c.opened){ctx.shadowColor=c.kind==='vault'?'#df94dd':'#efc479';ctx.shadowBlur=15;}rounded(c.x-12,c.y-7,24,18,3,c.opened?'#584b33':c.kind==='vault'?'#8e5790':'#bc9050');ctx.restore();rounded(c.x-12,c.y-9,24,c.opened?4:8,2,c.opened?'#786343':c.kind==='vault'?'#e0a8e0':'#d9b675');if(!c.opened&&!low)diamond(c.x,c.y-19+Math.sin(time*3+c.x)*3,3,c.kind==='vault'?'#f2b8ef':'#ecd497');}
-  for(const p of w.pickups){const color={gold:'#edcf7d',key:'#88d2ee',potion:'#e78b9a',upgrade:'#bcabef'}[p.kind]||accent;if(low)circle(p.x,p.y,6,color);else{ctx.save();ctx.shadowBlur=12;ctx.shadowColor=color;diamond(p.x,p.y+Math.sin(time*4+p.id)*2,7,color);ctx.restore();}}
+  for(const p of w.pickups){if(p.kind==='key'){drawKey(p,time,low);continue;}const color={gold:'#edcf7d',potion:'#e78b9a',upgrade:'#bcabef'}[p.kind]||accent;if(low)circle(p.x,p.y,6,color);else{ctx.save();ctx.shadowBlur=12;ctx.shadowColor=color;diamond(p.x,p.y+Math.sin(time*4+p.id)*2,7,color);ctx.restore();}}
   for(const trap of w.traps){const active=Math.sin(time*2.2)>.25;for(let i=0;i<(low?1:3);i++)diamond(trap.x+(i-1)*9,trap.y,active?9:4,active?'#d18b70':'#58644d');}
   ctx.save();ctx.shadowBlur=low?0:22;ctx.shadowColor=accent;ctx.strokeStyle=w.bossDead?'#b7efbd':'#617365';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(map.exit.x,map.exit.y,19,13,0,0,Math.PI*2);ctx.stroke();ctx.restore();diamond(map.exit.x,map.exit.y-6+Math.sin(time*2)*3,8,w.bossDead?'#b7efbd':'#617365');
   const when=now-100;let a=states[0],b=states.at(-1);for(let i=1;i<states.length;i++)if(states[i].at>=when){a=states[i-1];b=states[i];break;}const blend=(object,previous)=>{if(!a||!b||!previous)return object;const t=Math.max(0,Math.min(1,(when-a.at)/Math.max(1,b.at-a.at)));return {...object,x:previous.x+(object.x-previous.x)*t,y:previous.y+(object.y-previous.y)*t};};

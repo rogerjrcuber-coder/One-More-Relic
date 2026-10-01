@@ -1,11 +1,23 @@
 import { biomes, duelArenas, wavesArenas, events, type Biome } from './content.js';
 import { clear, type Point } from '../shared/movement.js';
 export interface Feature extends Point { id: string; kind: string; open?: boolean; active?: boolean; value?: number; target?: Point }
+export type KeyType='red'|'blue'|'green'|'purple'|'gold';
+export interface Decoration extends Point {kind:string;color?:string}
 export interface GameMap {
   id:string; name:string; seed:number; biome:Biome; grid:number[][]; stageCount:number;
   lighting:string; event:string; modules:{kind:string;x:number;y:number;variant:number}[];
   features:Feature[]; spawns:Point[]; exit:Point; chestPricing:{baseCost:number;increase:number};
   creatures:Record<string,Record<string,unknown>>;
+  keyTypes?:Record<string,KeyType>; doorTypes?:Record<string,{type:KeyType;name:string}>;
+  bosses?:Record<string,{required?:boolean;final?:boolean;reward?:string}>; decorations?:Decoration[];
+}
+const keyTypes:KeyType[]=['red','blue','green','purple','gold'];
+export const keyTypeAt=(map:GameMap,x:number,y:number):KeyType=>map.keyTypes?.[x+','+y]||'blue';
+export const doorAt=(map:GameMap,x:number,y:number)=>map.doorTypes?.[x+','+y]||{type:'blue' as KeyType,name:'Blue crystal door'};
+function decorate(grid:number[][],seed:number,biome:Biome):Decoration[]{
+  const rng=random(seed+871),out:Decoration[]=[],choices:Record<Biome,string[]>={moss:['mushroom','roots','bush','flowers'],crystal:['crystal','crystal','rocks'],sunken:['bones','rocks','coral'],forge:['embers','debris','statue'],gardens:['flowers','bush','roots']};
+  for(let y=2;y<grid.length-2;y++)for(let x=2;x<grid[0]!.length-2;x++)if(grid[y]![x]===0&&rng()<.026){const near=out.some(d=>Math.abs(d.x/40-x)+Math.abs(d.y/40-y)<10);if(!near)out.push({...center(x,y),kind:choices[biome][Math.floor(rng()*choices[biome].length)]!});}
+  return out;
 }
 export function random(seed:number):()=>number { let n=seed>>>0;return ()=>{n+=0x6D2B79F5;let t=n;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296;}; }
 const center=(x:number,y:number)=>({x:x*40+20,y:y*40+20});
@@ -22,7 +34,7 @@ export function generateMap(seed:number,stage:number,mode:'dungeon'|'waves'|'due
   const config=mode==='duel'?duelArenas[arena%duelArenas.length]:mode==='waves'?wavesArenas[arena%wavesArenas.length]:undefined;
   const biome:Biome=config?.biome||selected,theme=biomes[biome];
   const grid=Array.from({length:mode==='dungeon'?41:29},()=>Array<number>(mode==='dungeon'?51:37).fill(1));
-  const features:Feature[]=[],placed:GameMap['modules']=[];
+  const features:Feature[]=[],placed:GameMap['modules']=[],keyTypesByTile:Record<string,KeyType>={},doorTypes:Record<string,{type:KeyType;name:string}>={};
   const carve=(x:number,y:number,w:number,h:number)=>{for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++)grid[yy]![xx]=0;};
   const feature=(x:number,y:number,kind:string,value?:number,target?:Point)=>features.push({id:`f${features.length}`,kind,...center(x,y),value,target,active:true});
   let spawns:Point[],exit:Point;
@@ -45,7 +57,7 @@ export function generateMap(seed:number,stage:number,mode:'dungeon'|'waves'|'due
     // Key-gated optional room: close both connectors, then place key before gate.
     for(let y=1;y<=9;y++)grid[y]![40]=1;
     for(let x=41;x<=49;x++)grid[10]![x]=1;
-    grid[5]![40]=10;grid[5]![35]=9;grid[5]![45]=11;
+    grid[5]![40]=10;grid[5]![35]=9;grid[5]![45]=11;keyTypesByTile['35,5']=biome==='crystal'?'purple':'blue';doorTypes['40,5']={type:keyTypesByTile['35,5']!,name:(biome==='crystal'?'Purple arcane':'Blue crystal')+' door'};
     // Optional vault module has a genuine spawn chance, not just different loot.
     if(rng()>=.4){for(let y=1;y<=9;y++)for(let x=41;x<=49;x++)grid[y]![x]=1;grid[5]![40]=1;}
     // A secret passage with a discoverable switch and a generous reward.
@@ -86,17 +98,22 @@ export function generateMap(seed:number,stage:number,mode:'dungeon'|'waves'|'due
   if(biome==='sunken')feature(15,5,'submerged-vault');
   if(biome==='gardens')feature(15,5,'living-root');
   const suffix=['Outskirts','Inner Sanctum','Throne Depths'][(stage-1)%3];
-  return {id:`${mode}-${seed}-${stage}-${arena}`,name:config?.name||`${theme.name} / ${suffix}`,seed,biome,grid,stageCount:3,lighting:event==='Darkness'?'dark':biome==='crystal'?'bright':'gloom',event,modules:placed,features,spawns,exit,chestPricing:{baseCost:3,increase:2},creatures:{}};
+  return {id:`${mode}-${seed}-${stage}-${arena}`,name:config?.name||`${theme.name} / ${suffix}`,seed,biome,grid,stageCount:3,lighting:event==='Darkness'?'dark':biome==='crystal'?'bright':'gloom',event,modules:placed,features,spawns,exit,chestPricing:{baseCost:3,increase:2},creatures:{},keyTypes:keyTypesByTile,doorTypes,decorations:decorate(grid,seed+stage*19,biome)};
 }
 export function validateMap(raw:unknown):GameMap {
   if(!raw||typeof raw!=='object')throw Error('Invalid map');
   const m=raw as Partial<GameMap>,g=m.grid;
   if(!Array.isArray(g)||g.length<16||g.length>44||!g[0]||g[0].length<20||g[0].length>64||!g.every(row=>Array.isArray(row)&&row.length===g[0]!.length&&row.every(t=>Number.isInteger(t)&&t>=0&&t<=11)))throw Error('Invalid grid');
   const points=(tile:number)=>g.flatMap((row,y)=>row.flatMap((t,x)=>t===tile?[center(x,y)]:[]));
-  if(points(2).length!==1||points(3).length!==1||points(7).length!==1)throw Error('Map needs one entrance, exit and boss');
+  if(points(2).length!==1||points(3).length!==1||points(7).length<1)throw Error('Map needs one entrance, exit and at least one boss');
   const spawn=points(2)[0]!,seen=new Set<string>(),queue=[spawn];
   while(queue.length){const p=queue.shift()!,x=Math.floor(p.x/40),y=Math.floor(p.y/40),key=`${x},${y}`;if(seen.has(key)||!clear(g,p.x,p.y))continue;seen.add(key);for(const [dx,dy]of [[40,0],[-40,0],[0,40],[0,-40]])queue.push({x:p.x+dx!,y:p.y+dy!});}
   for(let y=0;y<g.length;y++)for(let x=0;x<g[0]!.length;x++)if(g[y]![x]!>1&&!seen.has(`${x},${y}`))throw Error('Connect all map objectives');
   if(points(10).length>points(9).length)throw Error('Place enough keys for doors');
-  return {id:'custom',name:String(m.name||'Custom dungeon').slice(0,40),seed:0,biome:'moss',grid:g.map(r=>r.slice()),stageCount:Math.max(2,Math.min(5,Math.round(Number(m.stageCount)||2))),lighting:['gloom','bright','dark'].includes(String(m.lighting))?m.lighting!:'gloom',event:'Authored expedition',modules:[],features:[],spawns:[spawn],exit:points(3)[0]!,chestPricing:{baseCost:Math.max(0,Math.min(100,Number(m.chestPricing?.baseCost)||0)),increase:Math.max(0,Math.min(100,Number(m.chestPricing?.increase)||0))},creatures:m.creatures&&typeof m.creatures==='object'?m.creatures:{}};
+  const safeTypes=(value:unknown):Record<string,KeyType>=>value&&typeof value==='object'?Object.fromEntries(Object.entries(value as Record<string,unknown>).filter(([,v])=>keyTypes.includes(v as KeyType))) as Record<string,KeyType>:{};
+  const safeDoors=(value:unknown)=>value&&typeof value==='object'?Object.fromEntries(Object.entries(value as Record<string,unknown>).flatMap(([k,v])=>v&&typeof v==='object'&&keyTypes.includes((v as {type?:KeyType}).type!)?[[k,{type:(v as {type:KeyType}).type,name:String((v as {name?:string}).name||'Locked door').slice(0,32)}]]:[])):{};
+  const safeBosses=(value:unknown)=>value&&typeof value==='object'?Object.fromEntries(Object.entries(value as Record<string,unknown>).map(([k,v])=>[k,{required:(v as {required?:unknown})?.required!==false,final:(v as {final?:unknown})?.final===true,reward:String((v as {reward?:unknown})?.reward||'')}])):{};
+  const features=Array.isArray(m.features)?m.features.filter(f=>f&&typeof f==='object'&&['merchant','lift','switch','secret'].includes(String((f as Feature).kind))).slice(0,20).map((f,i)=>({id:'custom-'+i,kind:String((f as Feature).kind),x:Number((f as Feature).x),y:Number((f as Feature).y),value:Number((f as Feature).value)||8,active:true})):[];
+  const biome=(Object.keys(biomes).includes(String(m.biome))?m.biome:'moss') as Biome;
+  return {id:'custom',name:String(m.name||'Custom dungeon').slice(0,40),seed:0,biome,grid:g.map(r=>r.slice()),stageCount:Math.max(2,Math.min(5,Math.round(Number(m.stageCount)||2))),lighting:['gloom','bright','dark'].includes(String(m.lighting))?m.lighting!:'gloom',event:'Authored expedition',modules:[],features,spawns:[spawn],exit:points(3)[0]!,chestPricing:{baseCost:Math.max(0,Math.min(100,Number(m.chestPricing?.baseCost)||0)),increase:Math.max(0,Math.min(100,Number(m.chestPricing?.increase)||0))},creatures:m.creatures&&typeof m.creatures==='object'?m.creatures:{},keyTypes:safeTypes(m.keyTypes),doorTypes:safeDoors(m.doorTypes),bosses:safeBosses(m.bosses),decorations:decorate(g,97,biome)};
 }
