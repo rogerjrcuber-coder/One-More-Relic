@@ -1,6 +1,6 @@
-One More Relic - Master Prompt, cumulative baseline through v1.2.1
+One More Relic - Master Prompt, cumulative baseline through v1.2.5
 
-Current baseline: the original specification below plus [v1.1](MASTER_SPEC_V1_1.md), [v1.2 multiplayer and mode rework](MASTER_SPEC_V1_2.md), and [v1.2.1 map variety rework](MASTER_SPEC_V1_2_1.md).
+Current baseline: the original specification below plus [v1.1](MASTER_SPEC_V1_1.md), [v1.2 multiplayer and mode rework](MASTER_SPEC_V1_2.md), [v1.2.1 map variety rework](MASTER_SPEC_V1_2_1.md), and [v1.2.5 world interaction, workshop, keys, environment, and multi-boss progression](MASTER_SPEC_V1_2_5.md).
 
 The newest addendum takes precedence where requirements conflict. Preserve the editable chest base cost and per-opening increase, local loadouts and blueprints, and existing saves through explicit migrations.
 
