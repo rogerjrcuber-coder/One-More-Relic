@@ -17,7 +17,7 @@ async function connect(){
   socket?.disconnect();socket=window.io(endpoint,{reconnection:false,timeout:5000});
   socket.on('room:state',receive);
   socket.on('latency:probe',ack=>ack());
-  socket.on('server:hello',h=>{if(h.protocol!==PROTOCOL){error('Server update required: deploy v1.2.5 before playing.');socket.disconnect();}});
+  socket.on('server:hello',h=>{if(h.protocol!==PROTOCOL){error('Server update required: deploy v1.2.6 before playing.');socket.disconnect();}});
   socket.on('disconnect',()=>{if(active){keys.clear();mouse.down=false;pending=[];active=false;error('Connection lost. Rejoin your party from Play.');}});
   await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('connect_error',()=>reject(Error('Cannot reach the game server.')));});
 }
